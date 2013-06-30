@@ -22,7 +22,7 @@
     [self.window makeKeyAndVisible];
     
     AAAAudioFile *audioFile = [[AAAAudioFile alloc] init];
-    SInt16* packets = [audioFile open:[[NSBundle mainBundle] pathForResource:@"test1" ofType:@"wav"] ofType:@"wav"];
+    SInt16* packets = [audioFile open:[[NSBundle mainBundle] pathForResource:@"250Hz_44100Hz_16bit_05sec" ofType:@"wav"] ofType:@"wav"];
 
     FFTManager *fftManager = [[FFTManager alloc] init];
     [fftManager performFFT:packets];
