@@ -75,6 +75,7 @@
 				01B3CBFA177E3A3F00A033A0 /* Accelerate.framework */,
 				01B3CBF5177E29D900A033A0 /* AudioToolbox.framework */,
 				01B3CBD3177E27AC00A033A0 /* AudioAnalysisApp */,
+				AE49AC7817878A5600464040 /* GSPlot */,
 				01B3CBCC177E27AC00A033A0 /* Frameworks */,
 				01B3CBCB177E27AC00A033A0 /* Products */,
 			);
@@ -129,6 +130,13 @@
 				01B3CBE3177E27AC00A033A0 /* Default-568h@2x.png */,
 			);
 			name = "Supporting Files";
+			sourceTree = "<group>";
+		};
+		AE49AC7817878A5600464040 /* GSPlot */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = GSPlot;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */

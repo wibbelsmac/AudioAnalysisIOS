@@ -115,10 +115,9 @@ const double kGraphMargin = 10.0;
             return (numerator / denominator) + [self.xAxisLine startPoint].x;
             
         default:
-            value = -value;
-            numerator = ([self.yAxisLine startPoint].y - [self.yAxisLine endPoint].y) * (value - [self.yAxisLine minValue]);
+            numerator = ([self.yAxisLine endPoint].y - [self.yAxisLine startPoint].y) * (value - [self.yAxisLine minValue]);
             denominator = [self.yAxisLine maxValue] - [self.yAxisLine minValue];
-            return (numerator / denominator) + [self.yAxisLine endPoint].y;
+            return (numerator / denominator) + [self.yAxisLine startPoint].y;
     }
 }
 

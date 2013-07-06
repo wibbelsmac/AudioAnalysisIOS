@@ -22,6 +22,13 @@
 		AE062F7F1783634A0047CBF3 /* GSGraph.m in Sources */ = {isa = PBXBuildFile; fileRef = AE062F7E1783634A0047CBF3 /* GSGraph.m */; };
 		AE062F82178363760047CBF3 /* GSLine.m in Sources */ = {isa = PBXBuildFile; fileRef = AE062F81178363760047CBF3 /* GSLine.m */; };
 		AE062F85178363860047CBF3 /* GSAxisLine.m in Sources */ = {isa = PBXBuildFile; fileRef = AE062F84178363860047CBF3 /* GSAxisLine.m */; };
+		AE49AC7B17878A9C00464040 /* FFTManager.mm in Sources */ = {isa = PBXBuildFile; fileRef = AE49AC7A17878A9C00464040 /* FFTManager.mm */; };
+		AE49AC8017878AF000464040 /* 250Hz_44100Hz_16bit_05sec.wav in Resources */ = {isa = PBXBuildFile; fileRef = AE49AC7D17878AF000464040 /* 250Hz_44100Hz_16bit_05sec.wav */; };
+		AE49AC8117878AF000464040 /* AAAAudioFile.m in Sources */ = {isa = PBXBuildFile; fileRef = AE49AC7F17878AF000464040 /* AAAAudioFile.m */; };
+		AE49AC8517878B5F00464040 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AE49AC8417878B5F00464040 /* Accelerate.framework */; };
+		AE49AC8717878B7700464040 /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AE49AC8617878B7700464040 /* AudioToolbox.framework */; };
+		AE49AC8917878F5A00464040 /* test1.wav in Resources */ = {isa = PBXBuildFile; fileRef = AE49AC8817878F5A00464040 /* test1.wav */; };
+		AE49AC8B1787C61000464040 /* test2.wav in Resources */ = {isa = PBXBuildFile; fileRef = AE49AC8A1787C61000464040 /* test2.wav */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -49,6 +56,15 @@
 		AE062F81178363760047CBF3 /* GSLine.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GSLine.m; sourceTree = "<group>"; };
 		AE062F83178363850047CBF3 /* GSAxisLine.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = GSAxisLine.h; sourceTree = "<group>"; };
 		AE062F84178363860047CBF3 /* GSAxisLine.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GSAxisLine.m; sourceTree = "<group>"; };
+		AE49AC7917878A9C00464040 /* FFTManager.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = FFTManager.h; path = ../AudioAnalysisApp/FFTManager.h; sourceTree = "<group>"; };
+		AE49AC7A17878A9C00464040 /* FFTManager.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = FFTManager.mm; path = ../AudioAnalysisApp/FFTManager.mm; sourceTree = "<group>"; };
+		AE49AC7D17878AF000464040 /* 250Hz_44100Hz_16bit_05sec.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; name = 250Hz_44100Hz_16bit_05sec.wav; path = ../AudioAnalysisApp/250Hz_44100Hz_16bit_05sec.wav; sourceTree = "<group>"; };
+		AE49AC7E17878AF000464040 /* AAAAudioFile.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = AAAAudioFile.h; path = ../AudioAnalysisApp/AAAAudioFile.h; sourceTree = "<group>"; };
+		AE49AC7F17878AF000464040 /* AAAAudioFile.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = AAAAudioFile.m; path = ../AudioAnalysisApp/AAAAudioFile.m; sourceTree = "<group>"; };
+		AE49AC8417878B5F00464040 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
+		AE49AC8617878B7700464040 /* AudioToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AudioToolbox.framework; path = System/Library/Frameworks/AudioToolbox.framework; sourceTree = SDKROOT; };
+		AE49AC8817878F5A00464040 /* test1.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; name = test1.wav; path = ../AudioAnalysisApp/test1.wav; sourceTree = "<group>"; };
+		AE49AC8A1787C61000464040 /* test2.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; name = test2.wav; path = ../AudioAnalysisApp/test2.wav; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -56,6 +72,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AE49AC8717878B7700464040 /* AudioToolbox.framework in Frameworks */,
+				AE49AC8517878B5F00464040 /* Accelerate.framework in Frameworks */,
 				AE062F5817835FF00047CBF3 /* UIKit.framework in Frameworks */,
 				AE062F5A17835FF00047CBF3 /* Foundation.framework in Frameworks */,
 				AE062F5C17835FF00047CBF3 /* CoreGraphics.framework in Frameworks */,
@@ -68,6 +86,7 @@
 		AE062F4B17835FF00047CBF3 = {
 			isa = PBXGroup;
 			children = (
+				AE49AC7C17878A9F00464040 /* Audio Analysis */,
 				AE062F5D17835FF00047CBF3 /* GSPlot */,
 				AE062F5617835FF00047CBF3 /* Frameworks */,
 				AE062F5517835FF00047CBF3 /* Products */,
@@ -85,6 +104,8 @@
 		AE062F5617835FF00047CBF3 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				AE49AC8617878B7700464040 /* AudioToolbox.framework */,
+				AE49AC8417878B5F00464040 /* Accelerate.framework */,
 				AE062F5717835FF00047CBF3 /* UIKit.framework */,
 				AE062F5917835FF00047CBF3 /* Foundation.framework */,
 				AE062F5B17835FF00047CBF3 /* CoreGraphics.framework */,
@@ -125,6 +146,20 @@
 				AE062F6D17835FF00047CBF3 /* Default-568h@2x.png */,
 			);
 			name = "Supporting Files";
+			sourceTree = "<group>";
+		};
+		AE49AC7C17878A9F00464040 /* Audio Analysis */ = {
+			isa = PBXGroup;
+			children = (
+				AE49AC8A1787C61000464040 /* test2.wav */,
+				AE49AC8817878F5A00464040 /* test1.wav */,
+				AE49AC7D17878AF000464040 /* 250Hz_44100Hz_16bit_05sec.wav */,
+				AE49AC7E17878AF000464040 /* AAAAudioFile.h */,
+				AE49AC7F17878AF000464040 /* AAAAudioFile.m */,
+				AE49AC7917878A9C00464040 /* FFTManager.h */,
+				AE49AC7A17878A9C00464040 /* FFTManager.mm */,
+			);
+			name = "Audio Analysis";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -183,6 +218,9 @@
 				AE062F6C17835FF00047CBF3 /* Default@2x.png in Resources */,
 				AE062F6E17835FF00047CBF3 /* Default-568h@2x.png in Resources */,
 				AE062F7117835FF00047CBF3 /* MainStoryboard.storyboard in Resources */,
+				AE49AC8017878AF000464040 /* 250Hz_44100Hz_16bit_05sec.wav in Resources */,
+				AE49AC8917878F5A00464040 /* test1.wav in Resources */,
+				AE49AC8B1787C61000464040 /* test2.wav in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -200,6 +238,8 @@
 				AE062F7F1783634A0047CBF3 /* GSGraph.m in Sources */,
 				AE062F82178363760047CBF3 /* GSLine.m in Sources */,
 				AE062F85178363860047CBF3 /* GSAxisLine.m in Sources */,
+				AE49AC7B17878A9C00464040 /* FFTManager.mm in Sources */,
+				AE49AC8117878AF000464040 /* AAAAudioFile.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -324,6 +364,7 @@
 				AE062F7917835FF00047CBF3 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};

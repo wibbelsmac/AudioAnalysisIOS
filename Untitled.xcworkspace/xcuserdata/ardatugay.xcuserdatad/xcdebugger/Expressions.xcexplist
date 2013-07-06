@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<VariablesViewState
+   version = "1.0">
+   <ContextStates>
+      <ContextState
+         contextName = "GLOBAL">
+         <PersistentStrings>
+            <PersistentString
+               value = "self.xValues[0]">
+            </PersistentString>
+         </PersistentStrings>
+      </ContextState>
+      <ContextState
+         contextName = "-[GSGraph scaleValueToViewCoordinates:forAxis:]:GSGraph.m">
+         <PersistentStrings>
+            <PersistentString
+               value = "self.yValues[0]">
+            </PersistentString>
+         </PersistentStrings>
+      </ContextState>
+      <ContextState
+         contextName = "-[GSGraph plotXAndYValues]:GSGraph.m">
+         <PersistentStrings>
+            <PersistentString
+               value = "self.yValues[0]">
+            </PersistentString>
+         </PersistentStrings>
+      </ContextState>
+      <ContextState
+         contextName = "-[GSGraph initWithXValues:YValues:withContext:]:GSGraph.m">
+         <PersistentStrings>
+            <PersistentString
+               value = "self.yValues[0]">
+            </PersistentString>
+         </PersistentStrings>
+      </ContextState>
+   </ContextStates>
+</VariablesViewState>
