@@ -24,6 +24,10 @@
 		01B3CBF9177E39C600A033A0 /* FFTManager.mm in Sources */ = {isa = PBXBuildFile; fileRef = 01B3CBF7177E39C600A033A0 /* FFTManager.mm */; };
 		01B3CBFB177E3A3F00A033A0 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 01B3CBFA177E3A3F00A033A0 /* Accelerate.framework */; };
 		01B3CBFD1780D06800A033A0 /* 250Hz_44100Hz_16bit_05sec.wav in Resources */ = {isa = PBXBuildFile; fileRef = 01B3CBFC1780D06800A033A0 /* 250Hz_44100Hz_16bit_05sec.wav */; };
+		AE49AC94178A6FC400464040 /* GSAxisLine.m in Sources */ = {isa = PBXBuildFile; fileRef = AE49AC8D178A6FC400464040 /* GSAxisLine.m */; };
+		AE49AC95178A6FC400464040 /* GSGraph.m in Sources */ = {isa = PBXBuildFile; fileRef = AE49AC8F178A6FC400464040 /* GSGraph.m */; };
+		AE49AC96178A6FC400464040 /* GSLine.m in Sources */ = {isa = PBXBuildFile; fileRef = AE49AC91178A6FC400464040 /* GSLine.m */; };
+		AE49AC97178A6FC400464040 /* PlotView.m in Sources */ = {isa = PBXBuildFile; fileRef = AE49AC93178A6FC400464040 /* PlotView.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -51,6 +55,14 @@
 		01B3CBF8177E39C600A033A0 /* FFTManager.h */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.h; fileEncoding = 4; path = FFTManager.h; sourceTree = "<group>"; usesTabs = 0; };
 		01B3CBFA177E3A3F00A033A0 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
 		01B3CBFC1780D06800A033A0 /* 250Hz_44100Hz_16bit_05sec.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = 250Hz_44100Hz_16bit_05sec.wav; sourceTree = "<group>"; };
+		AE49AC8C178A6FC400464040 /* GSAxisLine.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = GSAxisLine.h; path = GSPlot/GSPlot/GSAxisLine.h; sourceTree = "<group>"; };
+		AE49AC8D178A6FC400464040 /* GSAxisLine.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = GSAxisLine.m; path = GSPlot/GSPlot/GSAxisLine.m; sourceTree = "<group>"; };
+		AE49AC8E178A6FC400464040 /* GSGraph.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = GSGraph.h; path = GSPlot/GSPlot/GSGraph.h; sourceTree = "<group>"; };
+		AE49AC8F178A6FC400464040 /* GSGraph.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = GSGraph.m; path = GSPlot/GSPlot/GSGraph.m; sourceTree = "<group>"; };
+		AE49AC90178A6FC400464040 /* GSLine.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = GSLine.h; path = GSPlot/GSPlot/GSLine.h; sourceTree = "<group>"; };
+		AE49AC91178A6FC400464040 /* GSLine.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = GSLine.m; path = GSPlot/GSPlot/GSLine.m; sourceTree = "<group>"; };
+		AE49AC92178A6FC400464040 /* PlotView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = PlotView.h; path = GSPlot/GSPlot/PlotView.h; sourceTree = "<group>"; };
+		AE49AC93178A6FC400464040 /* PlotView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = PlotView.m; path = GSPlot/GSPlot/PlotView.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -75,6 +87,7 @@
 				01B3CBFA177E3A3F00A033A0 /* Accelerate.framework */,
 				01B3CBF5177E29D900A033A0 /* AudioToolbox.framework */,
 				01B3CBD3177E27AC00A033A0 /* AudioAnalysisApp */,
+				AE49AC7817878A5600464040 /* GSPlot */,
 				01B3CBCC177E27AC00A033A0 /* Frameworks */,
 				01B3CBCB177E27AC00A033A0 /* Products */,
 			);
@@ -129,6 +142,21 @@
 				01B3CBE3177E27AC00A033A0 /* Default-568h@2x.png */,
 			);
 			name = "Supporting Files";
+			sourceTree = "<group>";
+		};
+		AE49AC7817878A5600464040 /* GSPlot */ = {
+			isa = PBXGroup;
+			children = (
+				AE49AC8C178A6FC400464040 /* GSAxisLine.h */,
+				AE49AC8D178A6FC400464040 /* GSAxisLine.m */,
+				AE49AC8E178A6FC400464040 /* GSGraph.h */,
+				AE49AC8F178A6FC400464040 /* GSGraph.m */,
+				AE49AC90178A6FC400464040 /* GSLine.h */,
+				AE49AC91178A6FC400464040 /* GSLine.m */,
+				AE49AC92178A6FC400464040 /* PlotView.h */,
+				AE49AC93178A6FC400464040 /* PlotView.m */,
+			);
+			name = GSPlot;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -205,6 +233,10 @@
 				01B3CBE7177E27AC00A033A0 /* AAAViewController.m in Sources */,
 				01B3CBF4177E295D00A033A0 /* AAAAudioFile.m in Sources */,
 				01B3CBF9177E39C600A033A0 /* FFTManager.mm in Sources */,
+				AE49AC94178A6FC400464040 /* GSAxisLine.m in Sources */,
+				AE49AC95178A6FC400464040 /* GSGraph.m in Sources */,
+				AE49AC96178A6FC400464040 /* GSLine.m in Sources */,
+				AE49AC97178A6FC400464040 /* PlotView.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
