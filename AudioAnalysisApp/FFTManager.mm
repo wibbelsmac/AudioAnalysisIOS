@@ -16,7 +16,7 @@
 @implementation FFTManager
 
 const int sampleFreq = 44100;
-const float sampleFrameTime = .025f;
+const float sampleFrameTime = .05f;
 const int numSamplesPerFrame = sampleFrameTime * sampleFreq;
 const float subFrameFract = .60f;
 const int numSamplesPerSubFrame = numSamplesPerFrame * subFrameFract;
@@ -195,7 +195,7 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
             }
         }
     }
-//                NSLog(@"%d", sampleFreq/(peakArray[1] - peakArray[0]));
+                NSLog(@"%d", sampleFreq/(peakArray[1] - peakArray[0]));
     return sampleFreq / (peakArray[1] - peakArray[0]);
 }
 @end
