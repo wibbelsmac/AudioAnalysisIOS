@@ -8,8 +8,10 @@
 
 #import <Foundation/Foundation.h>
 
-@interface AAAAudioFile : NSObject
+@interface AAAAudioFile : NSObject {
 
+}
+@property (nonatomic) int byteCount;
 - (SInt16 *)open:(NSString *)fileName ofType:(NSString *)fileType;
 
 @end

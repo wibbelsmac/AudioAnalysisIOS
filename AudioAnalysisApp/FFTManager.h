@@ -11,6 +11,6 @@
 
 @interface FFTManager : NSObject
 
-- (void)performFFT:(SInt16 *)packets;
+- (void)performFFT:(SInt16 *)packets ByteCount:(int) byteCount;
 
 @end

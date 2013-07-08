@@ -11,6 +11,7 @@
 #import "AAAAudioFile.h"
 
 @implementation AAAAudioFile
+@synthesize byteCount;
 
 - (SInt16 *)open:(NSString *)fileName ofType:(NSString *)fileType
 {
@@ -41,9 +42,12 @@
     if (packetCount > 0) {
         // Allocate Buffer
         audioData = (SInt16 *) malloc(2 * packetCount);
+
         // Read the Packets
         result = AudioFileReadPackets(mAudioFile, false, &numBytesRead, NULL, 0, &packetsRead, audioData);
+        self.byteCount = numBytesRead;
         NSLog(@"Read %d bytes, %d packets", (unsigned int)numBytesRead, (unsigned int)packetsRead);
+        
     }
         
     CFRelease(audioFileURL);

@@ -37,7 +37,7 @@
 //    SInt16* packets = [audioFile open:[[NSBundle mainBundle] pathForResource:@"test2" ofType:@"wav"] ofType:@"wav"];
     
     FFTManager *fftManager = [[FFTManager alloc] init];
-    [fftManager performFFT:packets];
+    [fftManager performFFT:packets ByteCount:audioFile.byteCount];
     
 //    GSGraph *graph = [[GSGraph alloc] initWithXValues:xValues YValues:yValues withContext:UIGraphicsGetCurrentContext()];
 //    [graph drawAxisLines];

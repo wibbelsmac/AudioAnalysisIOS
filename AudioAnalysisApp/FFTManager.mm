@@ -15,9 +15,48 @@
 
 @implementation FFTManager
 
-- (void)performFFT:(SInt16 *)packets
-{    
-    const int log2n = 12;
+const int sampleFreq = 44100;
+const float sampleFrameTime = .025f;
+const int numSamplesPerFrame = sampleFrameTime * sampleFreq;
+const float subFrameFract = .60f;
+const int numSamplesPerSubFrame = numSamplesPerFrame * subFrameFract;
+const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
+
+- (void)performFFT:(SInt16 *)packets ByteCount:(int) byteCount
+{
+    const int sampleCount = byteCount / sizeof(SInt16);
+    // Populate *window with the values for a hamming window function
+    float *hannWindow = (float *)malloc(sizeof(float) * numSamplesPerFrame);
+    float *tempSamples = (float *)malloc(sizeof(float) * numSamplesPerFrame);
+    float *subFrameSamples = (float *)malloc(sizeof(float) * numSamplesPerSubFrame);
+    float *resultWindow = (float *)malloc(sizeof(float) * diffSubandFrame);
+   
+    vDSP_hamm_window(hannWindow, numSamplesPerFrame, 0);
+
+    NSMutableArray *peakValues = [[NSMutableArray alloc] init];
+    for(int i = 0; i < sampleCount - numSamplesPerFrame; i += numSamplesPerFrame) {
+        // Window the samples
+        int j = 0;
+        for(; j < numSamplesPerSubFrame; j++) {
+            tempSamples[j] = packets[i + j] * hannWindow[j];
+            subFrameSamples[j] = packets[i + j] * hannWindow[j];
+        }
+        for(; j < numSamplesPerFrame; j++) {
+            tempSamples[j] = packets[i + j] * hannWindow[j];
+        }
+        vDSP_conv(tempSamples,1, subFrameSamples,1,resultWindow, 1, diffSubandFrame, numSamplesPerSubFrame);
+        [peakValues addObject:[NSNumber numberWithInt:[self performWithNumFrames:resultWindow NumFrames:diffSubandFrame]]];
+    }
+    
+    NSMutableArray *xValues = [[NSMutableArray alloc] init];
+    for (int i = 0; i < peakValues.count; i++) {
+        xValues[i] = [NSNumber numberWithInt:i];
+    }
+    GSGraph *graph = [[GSGraph alloc] initWithXValues:xValues YValues:peakValues withContext:UIGraphicsGetCurrentContext()];
+    [graph drawAxisLines];
+    [graph plotXAndYValues]; 
+    
+    const int log2n = 13;
     const int n = (sizeof(packets) / sizeof(SInt16)) << log2n; // multiply size by 2^log2n
     const int nOver2 = n / 2;
     NSLog(@"%ld %ld %d", sizeof(packets), sizeof(SInt16), n);
@@ -81,16 +120,16 @@
     splitComplex.imagp = phase;
     
     // For graphing values
-    NSMutableArray *xValues = [[NSMutableArray alloc] init];
-    NSMutableArray *yValues = [[NSMutableArray alloc] init];
-    for (int i = 0; i < nOver2 / 2; i++) {
-        xValues[i] = [NSNumber numberWithInt:i];
-        yValues[i] = [NSNumber numberWithDouble:tmpData[i]];
-//        printf("%d %f\n", i, tmpData[i]);
-    }
-    GSGraph *graph = [[GSGraph alloc] initWithXValues:xValues YValues:yValues withContext:UIGraphicsGetCurrentContext()];
-    [graph drawAxisLines];
-    [graph plotXAndYValues];
+//    NSMutableArray *xValues = [[NSMutableArray alloc] init];
+//    NSMutableArray *yValues = [[NSMutableArray alloc] init];
+//    for (int i = 0; i < nOver2 / 2; i++) {
+//        xValues[i] = [NSNumber numberWithInt:i];
+//        yValues[i] = [NSNumber numberWithDouble:tmpData[i]];
+////        printf("%d %f\n", i, tmpData[i]);
+//    }
+//    GSGraph *graph = [[GSGraph alloc] initWithXValues:xValues YValues:yValues withContext:UIGraphicsGetCurrentContext()];
+//    [graph drawAxisLines];
+//    [graph plotXAndYValues];
 
     // Convert from polar coords back to rectangular coords
     vDSP_ztocD(&splitComplex, 1, complex, 2, nOver2);
@@ -127,4 +166,36 @@
     vDSP_destroy_fftsetupD(fftSetup);
 }
 
+-(int) performWithNumFrames:(float*)result NumFrames:(int) numFrames;
+{
+    int peakArray[2] = {0,0};
+    int i = 0;
+    for(int peak = 0; peak < 2; peak++) {
+        bool goingUp = false;
+        for(; i < numFrames; i++)
+        {
+            if(result[i]<0) {
+                //i+=2; // no peaks below 0, skip forward at a faster rate
+            } else {
+                if(result[i]>result[i-1] && goingUp == false && i >1) {
+                
+                    //local min at i-1
+                    goingUp = true;
+                
+                } else if(goingUp == true && result[i]<result[i-1]) {
+                
+                    //local max at i-1
+                    if(peakArray[peak] == 0 && result[i-1]>result[i]*0.95) {
+                        peakArray[peak] = i-1;
+                        break;
+                    } else if(result[i-1]>result[0]*0.85) {
+                    }
+                    goingUp = false;
+                }
+            }
+        }
+    }
+//                NSLog(@"%d", sampleFreq/(peakArray[1] - peakArray[0]));
+    return sampleFreq / (peakArray[1] - peakArray[0]);
+}
 @end
