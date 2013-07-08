@@ -50,23 +50,13 @@
     // from the time domain to the frequency domain (forward).
     vDSP_fft_zripD(fftSetup, &splitComplex, 1, log2n, kFFTDirection_Forward);
     
-<<<<<<< HEAD
-    // For polar coordinates
-    float *mag = new float[originalSize / 2];
-    float *mag_Db = new float[originalSize / 2];
-    float *phase = new float[originalSize / 2];
-    
-    // Scramble-pack the real data into the complex buffer in the way
-    // that it's required by the real-to-complex FFT function.
-    vDSP_ctoz((DSPComplex *)x, 2, &tempSplitComplex, 1, originalSize / 2);
-=======
     double window[nOver2];
     vDSP_hann_windowD(window, nOver2, vDSP_HANN_NORM);
     
     for (int i = 0; i < nOver2; i++) {
         splitComplex.realp[i] *= window[i];
     }
->>>>>>> a40a4d3bcfe58dedd0fbf56ddb09beca808ed436
+
     
     // For polar coordinates
     double *mag = new double[nOver2];
@@ -78,23 +68,6 @@
     
     // Convert from complex/rectangular (real & imaginary) coordinates
     // to polar (magnitude & phase) coordinates
-<<<<<<< HEAD
-    float mic_scale = (originalSize) * 2;
-    vDSP_zvabs(&tempSplitComplex, 1, mag, 1, originalSize / 2);
-    vDSP_zvphas(&tempSplitComplex, 1, phase, 1, originalSize / 2);
-    vDSP_vdbcon(mag, 1, &mic_scale, mag_Db, 1, originalSize/2, 0);
-    
-    printf("\nMag / Phase:\n");
-    for (int k = 0; k < originalSize / 2; k++) {
-        printf("%3d\t%6.2f\t%6.2f\n", k, mag[k], phase[k]);
-    }
-    float freqStep =  22000/ (originalSize / 2);
-    printf("\nDecibels:\n");
-    for (int k = 0; k < originalSize / 2; k++) {
-        printf("%f\t%f\n", (k * freqStep), mag_Db[k]);
-    }
-    
-=======
     vDSP_zvmagsD(&splitComplex, 1, tmpData, 1, nOver2);
     vDSP_vsaddD(tmpData, 1, &mAdjust0BD, tmpData, 1, nOver2);
     vDSP_vdbconD(tmpData, 1, &one, tmpData, 1, nOver2, 0);
@@ -119,7 +92,6 @@
     [graph drawAxisLines];
     [graph plotXAndYValues];
 
->>>>>>> a40a4d3bcfe58dedd0fbf56ddb09beca808ed436
     // Convert from polar coords back to rectangular coords
     vDSP_ztocD(&splitComplex, 1, complex, 2, nOver2);
     vDSP_rectD((double *)complex, 2, (double *)complex, 2, nOver2); // Polar to rectangular conversion
@@ -130,19 +102,6 @@
     vDSP_fft_zripD(fftSetup, &splitComplex, 1, log2n, kFFTDirection_Inverse);
 
     // Unpack the result into a real vector
-<<<<<<< HEAD
-    vDSP_ztoc(&tempSplitComplex, 1, (DSPComplex *)y, 2, originalSize / 2);
-    
-    // Compensate for scaling for both FFTs
-    float scale = 1.0 / originalSize;
-    vDSP_vsmul(y, 1, &scale, y, 1, originalSize);
-    
-    // For a sinusodial wave, input x and input y vectors will have identical values
-    printf("\nInput & output:\n");
-    for (int k = 0; k < originalSize / 2; k++) {
-        printf("%3d\t%6.2f\t%6.2f\n", k, x[k], y[k]);
-    }
-=======
     vDSP_ztocD(&splitComplex, 1, (DSPDoubleComplex *)output, 2, nOver2);
 
     // Compensate for scaling for both FFTs. See Apple's vDSP documentation
@@ -166,7 +125,6 @@
     
     // Destroy the fft setup to avoid memory leakage
     vDSP_destroy_fftsetupD(fftSetup);
->>>>>>> a40a4d3bcfe58dedd0fbf56ddb09beca808ed436
 }
 
 @end
