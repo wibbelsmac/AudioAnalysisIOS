@@ -10,13 +10,14 @@
 #include <stdlib.h>
 #include <cmath>
 #include "FFTManager.h"
+#include "AAAButterLow.h"
 
 #import "GSGraph.h"
 
 @implementation FFTManager
 
 const int sampleFreq = 44100;
-const float sampleFrameTime = .05f;
+const float sampleFrameTime = .1f;
 const int numSamplesPerFrame = sampleFrameTime * sampleFreq;
 const float subFrameFract = .60f;
 const int numSamplesPerSubFrame = numSamplesPerFrame * subFrameFract;
@@ -24,37 +25,17 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
 
 - (void)performFFT:(SInt16 *)packets ByteCount:(int) byteCount
 {
-    const int sampleCount = byteCount / sizeof(SInt16);
-    // Populate *window with the values for a hamming window function
-    float *hannWindow = (float *)malloc(sizeof(float) * numSamplesPerFrame);
-    float *tempSamples = (float *)malloc(sizeof(float) * numSamplesPerFrame);
-    float *subFrameSamples = (float *)malloc(sizeof(float) * numSamplesPerSubFrame);
-    float *resultWindow = (float *)malloc(sizeof(float) * diffSubandFrame);
-   
-    vDSP_hamm_window(hannWindow, numSamplesPerFrame, 0);
-
-    NSMutableArray *peakValues = [[NSMutableArray alloc] init];
-    for(int i = 0; i < sampleCount - numSamplesPerFrame; i += numSamplesPerFrame) {
-        // Window the samples
-        int j = 0;
-        for(; j < numSamplesPerSubFrame; j++) {
-            tempSamples[j] = packets[i + j] * hannWindow[j];
-            subFrameSamples[j] = packets[i + j] * hannWindow[j];
-        }
-        for(; j < numSamplesPerFrame; j++) {
-            tempSamples[j] = packets[i + j] * hannWindow[j];
-        }
-        vDSP_conv(tempSamples,1, subFrameSamples,1,resultWindow, 1, diffSubandFrame, numSamplesPerSubFrame);
-        [peakValues addObject:[NSNumber numberWithInt:[self performWithNumFrames:resultWindow NumFrames:diffSubandFrame]]];
-    }
     
-    NSMutableArray *xValues = [[NSMutableArray alloc] init];
-    for (int i = 0; i < peakValues.count; i++) {
-        xValues[i] = [NSNumber numberWithInt:i];
-    }
-    GSGraph *graph = [[GSGraph alloc] initWithXValues:xValues YValues:peakValues withContext:UIGraphicsGetCurrentContext()];
-    [graph drawAxisLines];
-    [graph plotXAndYValues]; 
+    // initialize butter worth filter with 1k cuttoff
+    AAAButterLow *bLow = [[AAAButterLow alloc] initWithSampleFreq:44100.0f CutoffFreq:1000.0f];
+    int dataLength = byteCount/ sizeof(packets);
+    
+    float* floatData = (float*) malloc(dataLength * sizeof(float));
+    vDSP_vflt16(packets, 1, floatData, 1, dataLength);
+    float* filteredResult = (float*) malloc(dataLength * sizeof(float));
+
+    [bLow filterArray:floatData DataLength:dataLength ResultArray:filteredResult ResultLength:dataLength];
+    [self performCrossCorrelation:filteredResult NumSamples: dataLength];
     
     const int log2n = 13;
     const int n = (sizeof(packets) / sizeof(SInt16)) << log2n; // multiply size by 2^log2n
@@ -165,13 +146,49 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     // Destroy the fft setup to avoid memory leakage
     vDSP_destroy_fftsetupD(fftSetup);
 }
+- (void)performCrossCorrelation:(float *)packets NumSamples:(int) numSamples {
+    
+    
+    const int sampleCount = numSamples;
+    // Populate *window with the values for a hamming window function
+    float *hannWindow = (float *)malloc(sizeof(float) * numSamplesPerFrame);
+    float *tempSamples = (float *)malloc(sizeof(float) * numSamplesPerFrame);
+    float *subFrameSamples = (float *)malloc(sizeof(float) * numSamplesPerSubFrame);
+    float *resultWindow = (float *)malloc(sizeof(float) * diffSubandFrame);
+    
+    vDSP_hamm_window(hannWindow, numSamplesPerFrame, 0);
+    
+    NSMutableArray *peakValues = [[NSMutableArray alloc] init];
+    
+    for(int i = 0; i < sampleCount - numSamplesPerFrame; i += numSamplesPerFrame) {
+        // Window the samples
+        int j = 0;
+        for(; j < numSamplesPerSubFrame; j++) {
+            tempSamples[j] = packets[i + j] * hannWindow[j];
+            subFrameSamples[j] = packets[i + j] * hannWindow[j];
+        }
+        for(; j < numSamplesPerFrame; j++) {
+            tempSamples[j] = packets[i + j] * hannWindow[j];
+        }
+        vDSP_conv(tempSamples,1, subFrameSamples,1,resultWindow, 1, diffSubandFrame, numSamplesPerSubFrame);
+        [peakValues addObject:[NSNumber numberWithInt:[self findPitchPeakFreq:resultWindow NumFrames:diffSubandFrame]]];
+    }
+    
+    NSMutableArray *xValues = [[NSMutableArray alloc] init];
+    for (int i = 0; i < peakValues.count; i++) {
+        xValues[i] = [NSNumber numberWithInt:i];
+    }
+    GSGraph *graph = [[GSGraph alloc] initWithXValues:xValues YValues:peakValues withContext:UIGraphicsGetCurrentContext()];
+    [graph drawAxisLines];
+    [graph plotXAndYValues];
+   
+}
 
--(int) performWithNumFrames:(float*)result NumFrames:(int) numFrames;
-{
-    int peakArray[2] = {0,0};
+-(int) findPitchPeakFreq:(float*)result NumFrames:(int) numFrames {
+    int peakArray[2] = {-1,-1};
     int i = 0;
+    bool goingUp = true;
     for(int peak = 0; peak < 2; peak++) {
-        bool goingUp = false;
         for(; i < numFrames; i++)
         {
             if(result[i]<0) {
@@ -186,16 +203,28 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
                 
                     //local max at i-1
                     if(peakArray[peak] == 0 && result[i-1]>result[i]*0.95) {
-                        peakArray[peak] = i-1;
-                        break;
+                        
                     } else if(result[i-1]>result[0]*0.85) {
                     }
                     goingUp = false;
+                    peakArray[peak] = i-1;
+                    break;
                 }
             }
         }
     }
-                NSLog(@"%d", sampleFreq/(peakArray[1] - peakArray[0]));
+    //NSLog(@"%d", sampleFreq/(peakArray[1] - peakArray[0]));
+    if(peakArray[0] > -1 && peakArray[1] > -1) {
+    printf("p0: %d, p1:%d, %d Hz \n", peakArray[0], peakArray[1], sampleFreq/(peakArray[1] - peakArray[0]));
     return sampleFreq / (peakArray[1] - peakArray[0]);
+    } else {
+        if((peakArray[0] > -1)) {
+            printf("Could not find any peak\n");
+        } else {
+            printf("Could not find second peak\n");
+        }
+        return 0;
+    }
 }
+
 @end
