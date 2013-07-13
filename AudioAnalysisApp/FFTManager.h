@@ -11,7 +11,15 @@
 
 @interface FFTManager : NSObject
 
-- (void)performFFT:(SInt16 *)packets PacketCount:(int)packetCount;
+@property (nonatomic) FFTSetupD fftSetup;
+@property (nonatomic) int mLog2N;
+@property (nonatomic) int mNumberOfPackets;
+@property (nonatomic) int mFFTLength;
+@property (nonatomic) double *mAudioBuffer;
+@property (nonatomic) DSPDoubleSplitComplex mSplitComplex;
+
+- (id)initWithPackets:(SInt16 *)packets PacketCount:(int)packetCount;
+- (void)performFFTOnRangeStartingAt:(int)sp EndingAt:(int)ep;
 - (void)performVoiceAnalysisOn:(double *)frames;
 
 @end

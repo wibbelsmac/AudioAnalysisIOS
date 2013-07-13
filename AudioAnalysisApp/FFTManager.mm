@@ -18,7 +18,9 @@
 
 @interface FFTManager(Private)
 
-- (void)plotBetweenStartingPacket:(int)sp EndWithPacket:(int)ep forPackets:(double *)packets;
+- (void)plotRange:(int)range forPackets:(double *)packets;
+- (void)plotAllValuesStartingPacket:(int)sp EndWithPacket:(int)ep forPackets:(double *)packets;
+- (void)applyHanningWindowTo:(double *)values StartingAt:(int)sv EndingAt:(int)ev;
 
 @end
 
@@ -30,6 +32,130 @@ const int numSamplesPerFrame = sampleFrameTime * sampleFreq;
 const float subFrameFract = .60f;
 const int numSamplesPerSubFrame = numSamplesPerFrame * subFrameFract;
 const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
+
+- (id)initWithPackets:(SInt16 *)packets PacketCount:(int)packetCount
+{
+    self = [super init];
+    if (self) {
+        _mLog2N = ceil(log2(packetCount));
+        _mNumberOfPackets = (int) pow(2, _mLog2N);
+        _mFFTLength = _mNumberOfPackets / 2;
+        NSLog(@"n = %d", _mNumberOfPackets);
+        
+        // An opaque type that contains setup information for a given double-precision FFT transform.
+        _fftSetup = vDSP_create_fftsetupD(_mLog2N, kFFTRadix2);
+        
+        // Initialize the input buffer with packets from the audio file
+        _mAudioBuffer = (double *) calloc(_mNumberOfPackets, sizeof(double));
+        for (int k = 0; k < _mNumberOfPackets; k++) {
+            _mAudioBuffer[k] = (double) packets[k];
+        }
+        free(packets);
+    }
+    return self;
+}
+
+- (void)performFFTOnRangeStartingAt:(int)sp EndingAt:(int)ep
+{
+    _mLog2N = ceil(log2(ep - sp));
+    _mNumberOfPackets = (int) pow(2, _mLog2N);
+    _mFFTLength = _mNumberOfPackets / 2;
+    
+    // We need complex buffers for real and imaginary parts. These buffers efficiently store values
+    // by getting rid of redundant values in real and imaginary parts of complex numbers.
+    _mSplitComplex.realp = (double *) calloc(_mFFTLength, sizeof(double));
+    _mSplitComplex.imagp = (double *) calloc(_mFFTLength, sizeof(double));
+    
+    // Transforms the real array input = {A[0],..., A[n]} into an even-odd
+    // array splitComplex = {A[0], A[2],..., A[n-1], A[1], A[3],..., A[n]}.
+    // splitComplex stores the imaginary and real parts in separate arrays
+    vDSP_ctozD((DSPDoubleComplex *)_mAudioBuffer, 2, &_mSplitComplex, 1, _mFFTLength);
+    
+    // Computes an in-place single-precision real discrete Fourier transform,
+    // from the time domain to the frequency domain (forward).
+    vDSP_fft_zripD(self.fftSetup, &_mSplitComplex, 1, _mLog2N, kFFTDirection_Forward);
+    
+    [self plotRange:ep - sp forPackets:_mAudioBuffer];
+    
+    double scale = 1.0 / (2 * _mNumberOfPackets);
+    vDSP_vsmulD(_mSplitComplex.realp, 1, &scale, _mSplitComplex.realp, 1, _mFFTLength);
+    vDSP_vsmulD(_mSplitComplex.imagp, 1, &scale, _mSplitComplex.imagp, 1, _mFFTLength);
+    
+    _mSplitComplex.realp[0] = 0; // zeroing out the DC value
+    _mSplitComplex.imagp[0] = 0; // zeroing out the Nyquist value
+    
+    double tmpData[_mFFTLength];
+    double mAdjust0BD = 1.5849e-13;
+    double one = 1.0;
+    
+    // Convert from complex/rectangular (real & imaginary) coordinates
+    // to polar (magnitude & phase) coordinates
+    vDSP_zvmagsD(&_mSplitComplex, 1, tmpData, 1, _mFFTLength);
+    vDSP_vsaddD(tmpData, 1, &mAdjust0BD, tmpData, 1, _mFFTLength);
+    vDSP_vdbconD(tmpData, 1, &one, tmpData, 1, _mFFTLength, 0);
+    
+    for (int i = 0; i < _mFFTLength; i++) {
+        if (tmpData[i] < 0.0) {
+            tmpData[i] = 0;
+        }
+    }
+    
+//    [self plotRange:_mFFTLength forPackets:tmpData];
+    
+    DSPDoubleComplex *complex = new DSPDoubleComplex[_mFFTLength];
+    
+    // For polar coordinates
+    double *mag = new double[_mFFTLength];
+    double *phase = new double[_mFFTLength];
+    
+    // Get complex vector absolute values
+    vDSP_zvabsD(&_mSplitComplex, 1, mag, 1, _mFFTLength);
+    // Get complex vector phase
+    vDSP_zvphasD(&_mSplitComplex, 1, phase, 1, _mFFTLength);
+    
+    _mSplitComplex.realp = mag;
+    _mSplitComplex.imagp = phase;
+    
+    // Convert from polar coords back to rectangular coords
+    vDSP_ztocD(&_mSplitComplex, 1, complex, 2, _mFFTLength);
+    vDSP_rectD((double *)complex, 2, (double *)complex, 2, _mFFTLength); // Polar to rectangular conversion
+    vDSP_ctozD(complex, 2, &_mSplitComplex, 1, _mFFTLength);
+    
+    // Computes an in-place single-precision real discrete Fourier transform,
+    // from the frequency domain to the time domain (inverse).
+    vDSP_fft_zripD(_fftSetup, &_mSplitComplex, 1, _mLog2N, kFFTDirection_Inverse);
+    
+    // Unpack the result into a real vector
+    vDSP_ztocD(&_mSplitComplex, 1, (DSPDoubleComplex *)_mAudioBuffer, 2, _mLog2N);
+    
+    // Compensate for scaling for both FFTs. See Apple's vDSP documentation
+    // to see how much scaling is required.
+    // NOTE: Apple scales values to increase the efficiency of their functions.
+    // As such, we have to scale them back.
+    vDSP_vsmulD(_mAudioBuffer, 1, &scale, _mAudioBuffer, 1, _mLog2N);
+    
+//    [self plotRange:ep - sp forPackets:_mAudioBuffer];
+    
+    free(_mSplitComplex.realp);
+    free(_mSplitComplex.imagp);
+}
+
+- (void)applyHanningWindowTo:(double *)values StartingAt:(int)sv EndingAt:(int)ev
+{
+    int range = ev - sv;
+    double *window = new double[range];
+    vDSP_hann_windowD(window, self.mNumberOfPackets, vDSP_HANN_NORM);
+    
+    for (int i = 0, index = sv; index < ev; i++, index++) {
+        values[index] *= window[i];
+    }
+}
+
+- (void)dealloc
+{
+    vDSP_destroy_fftsetupD(_fftSetup);
+    free(_mAudioBuffer);
+}
 
 - (void)performFFT:(SInt16 *)packets PacketCount:(int)packetCount
 {
@@ -46,156 +172,38 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
 //    [self performCrossCorrelation:filteredResult NumSamples: dataLength];
     
     // ------------------------------------------------------------------------
-    
-    const int log2n = ceil(log2(packetCount));
-    const int n = (int) pow(2, log2n);
-    const int nOver2 = n / 2;
-    NSLog(@"n = %d", n);
-//    NSLog(@"~log2(byteCount) = %d", (int) floor(log2(packetCount)));
-    
-    // An opaque type that contains setup information for a given double-precision FFT transform.
-    FFTSetupD fftSetup = vDSP_create_fftsetupD(log2n, kFFTRadix2);
-
-    // Buffers for input signals before processing and output signals after processing
-    double *input = new double[n];
-    double *output = new double[n];
-    
-    // Initialize the input buffer with packets from the audio file
-    for (int k = 0; k < n; k++) {
-        input[k] = (double)packets[k];
-    }
-    
-    double *window = new double[n];
-    vDSP_hann_windowD(window, n, vDSP_HANN_NORM);
-    
-    for (int i = 0; i < n; i++) {
-        input[i] *= window[i];
-    }
-    
-//    [self plotBetweenStartingPacket:(int) floor(44100.0 * 0.577394) EndWithPacket:(int) ceil(44100.0 * 1.284811) forPackets:input];
-
-//    [self performVoiceAnalysisOn:input];
-    
-    // We need complex buffers for real and imaginary parts. These buffers efficiently store values
-    // by getting rid of redundant values in real and imaginary parts of complex numbers.
-    DSPDoubleComplex *complex = new DSPDoubleComplex[nOver2];
-    DSPDoubleSplitComplex splitComplex;
-    splitComplex.realp = new double[nOver2];
-    splitComplex.imagp = new double[nOver2];
-    
-    // Transforms the real array input = {A[0],..., A[n]} into an even-odd
-    // array splitComplex = {A[0], A[2],..., A[n-1], A[1], A[3],..., A[n]}.
-    // splitComplex stores the imaginary and real parts in separate arrays
-    vDSP_ctozD((DSPDoubleComplex *)input, 2, &splitComplex, 1, nOver2);
-
-    // Computes an in-place single-precision real discrete Fourier transform,
-    // from the time domain to the frequency domain (forward).
-    vDSP_fft_zripD(fftSetup, &splitComplex, 1, 15, kFFTDirection_Forward);
-    
-    splitComplex.realp[0] = 0;
-    splitComplex.realp[nOver2] = 0;
-    
-//    // For graphing values
-//    NSMutableArray *xValues = [[NSMutableArray alloc] init];
-//    NSMutableArray *yValues = [[NSMutableArray alloc] init];
-//    for (int i = 0; i < 512; i++) {
-//        xValues[i] = [NSNumber numberWithInt:i * 256];
-//        yValues[i] = [NSNumber numberWithDouble:abs(splitComplex.realp[i * 256])];
-//        printf("%d %.3d\n", i * 256, abs(splitComplex.realp[i * 256]));
-//    }
-//    GSGraph *graph = [[GSGraph alloc] initWithXValues:xValues YValues:yValues withContext:UIGraphicsGetCurrentContext()];
-//    [graph drawAxisLines];
-//    [graph plotXAndYValues];
-    
-    // For polar coordinates
-    double *mag = new double[nOver2];
-    double *phase = new double[nOver2];
-    
-    double tmpData[nOver2];
-    double mAdjust0BD = 1.5849e-13;
-    double one = 1;
-    
-    // Convert from complex/rectangular (real & imaginary) coordinates
-    // to polar (magnitude & phase) coordinates
-    vDSP_zvmagsD(&splitComplex, 1, tmpData, 1, nOver2);
-    vDSP_vsaddD(tmpData, 1, &mAdjust0BD, tmpData, 1, nOver2);
-    vDSP_vdbconD(tmpData, 1, &one, tmpData, 1, nOver2, 0);
-    
-//    [self plotBetweenStartingPacket:(int) floor(44100.0 * 0.577394) EndWithPacket:(int) ceil(44100.0 * 1.284811) forPackets:tmpData];
-    [self plotBetweenStartingPacket:0 EndWithPacket:nOver2 forPackets:tmpData];
-    
-//    // For graphing values
-//    NSMutableArray *xValues = [[NSMutableArray alloc] init];
-//    NSMutableArray *yValues = [[NSMutableArray alloc] init];
-//    for (int i = 0; i < 512; i++) {
-//        xValues[i] = [NSNumber numberWithInt:i * 256];
-//        yValues[i] = [NSNumber numberWithDouble:abs(tmpData[i * 256])];
-//    }
-//    GSGraph *graph = [[GSGraph alloc] initWithXValues:xValues YValues:yValues withContext:UIGraphicsGetCurrentContext()];
-//    [graph drawAxisLines];
-//    [graph plotXAndYValues];
-    
-    // Get complex vector absolute values
-    vDSP_zvabsD(&splitComplex, 1, mag, 1, nOver2);
-    // Get complex vector phase
-    vDSP_zvphasD(&splitComplex, 1, phase, 1, nOver2);
-    
-    splitComplex.realp = mag;
-    splitComplex.imagp = phase;
-
-    // Convert from polar coords back to rectangular coords
-    vDSP_ztocD(&splitComplex, 1, complex, 2, nOver2);
-    vDSP_rectD((double *)complex, 2, (double *)complex, 2, nOver2); // Polar to rectangular conversion
-    vDSP_ctozD(complex, 2, &splitComplex, 1, nOver2);
-
-    // Computes an in-place single-precision real discrete Fourier transform,
-    // from the frequency domain to the time domain (inverse).
-    vDSP_fft_zripD(fftSetup, &splitComplex, 1, log2n, kFFTDirection_Inverse);
-    
-    // Compensate for scaling for both FFTs. See Apple's vDSP documentation
-    // to see how much scaling is required.
-    // NOTE: Apple scales values to increase the efficiency of their functions.
-    // As such, we have to scale them back.
-    double scale = 1.0 / (2 * n);
-    vDSP_vsmulD(output, 1, &scale, output, 1, nOver2);
-    
-    // Unpack the result into a real vector
-    vDSP_ztocD(&splitComplex, 1, (DSPDoubleComplex *)output, 2, nOver2);
-    
-//    // For graphing values
-//    NSMutableArray *xValues = [[NSMutableArray alloc] init];
-//    NSMutableArray *yValues = [[NSMutableArray alloc] init];
-//    for (int i = 0; i < 2048; i++) {
-//        xValues[i] = [NSNumber numberWithInt:i * 256];
-//        yValues[i] = [NSNumber numberWithDouble:output[i * 256]];
-//    }
-//    GSGraph *graph = [[GSGraph alloc] initWithXValues:xValues YValues:yValues withContext:UIGraphicsGetCurrentContext()];
-//    [graph drawAxisLines];
-//    [graph plotXAndYValues];
-    
-    // Destroy the fft setup to avoid memory leakage
-    vDSP_destroy_fftsetupD(fftSetup);
 }
 
-- (void)plotBetweenStartingPacket:(int)sp EndWithPacket:(int)ep forPackets:(double *)packets
+- (void)plotRange:(int)range forPackets:(double *)packets
 {
     NSMutableArray *xValues = [[NSMutableArray alloc] init];
     NSMutableArray *yValues = [[NSMutableArray alloc] init];
-    int range = ep - sp;
     int resolution = (int) ceil(log2(range));
     resolution = CLAMP(resolution, 10, 20);
-    for (int i = 0, index = sp; index < ep; i++, index += resolution) {
+    for (int i = 0, index = 0; index < range; i++, index += 128) {
         xValues[i] = [NSNumber numberWithInt:index];
-        yValues[i] = [NSNumber numberWithDouble:abs(packets[index])];
+        yValues[i] = [NSNumber numberWithDouble:packets[index]];
     }
     GSGraph *graph = [[GSGraph alloc] initWithXValues:xValues YValues:yValues withContext:UIGraphicsGetCurrentContext()];
     [graph drawAxisLines];
     [graph plotXAndYValues];
 }
 
-- (void)performCrossCorrelation:(float *)packets NumSamples:(int) numSamples {
-    
-    
+- (void)plotAllValuesStartingPacket:(int)sp EndWithPacket:(int)ep forPackets:(double *)packets
+{
+    NSMutableArray *xValues = [[NSMutableArray alloc] init];
+    NSMutableArray *yValues = [[NSMutableArray alloc] init];
+    for (int i = 0, index = sp; index < ep; i++, index++) {
+        xValues[i] = [NSNumber numberWithInt:index];
+        yValues[i] = [NSNumber numberWithDouble:packets[index]];
+    }
+    GSGraph *graph = [[GSGraph alloc] initWithXValues:xValues YValues:yValues withContext:UIGraphicsGetCurrentContext()];
+    [graph drawAxisLines];
+    [graph plotXAndYValues];
+}
+
+- (void)performCrossCorrelation:(float *)packets NumSamples:(int) numSamples
+{    
     const int sampleCount = numSamples;
     // Populate *window with the values for a hamming window function
     float *hannWindow = (float *)malloc(sizeof(float) * numSamplesPerFrame);
@@ -207,7 +215,7 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     
     NSMutableArray *peakValues = [[NSMutableArray alloc] init];
     
-    for(int i = 0; i < sampleCount - numSamplesPerFrame; i += numSamplesPerFrame) {
+    for (int i = 0; i < sampleCount - numSamplesPerFrame; i += numSamplesPerFrame) {
         // Window the samples
         int j = 0;
         for(; j < numSamplesPerSubFrame; j++) {
@@ -220,15 +228,6 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
         vDSP_conv(tempSamples,1, subFrameSamples,1,resultWindow, 1, diffSubandFrame, numSamplesPerSubFrame);
         [peakValues addObject:[NSNumber numberWithInt:[self findPitchPeakFreq:resultWindow NumFrames:diffSubandFrame]]];
     }
-    
-//    NSMutableArray *xValues = [[NSMutableArray alloc] init];
-//    for (int i = 0; i < peakValues.count; i++) {
-//        xValues[i] = [NSNumber numberWithInt:i];
-//    }
-//    GSGraph *graph = [[GSGraph alloc] initWithXValues:xValues YValues:peakValues withContext:UIGraphicsGetCurrentContext()];
-//    [graph drawAxisLines];
-//    [graph plotXAndYValues];
-   
 }
 
 -(int) findPitchPeakFreq:(float*)result NumFrames:(int) numFrames {
