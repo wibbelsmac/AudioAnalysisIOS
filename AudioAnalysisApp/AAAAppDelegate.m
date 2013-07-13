@@ -21,12 +21,6 @@
     self.window.rootViewController = self.viewController;
     [self.window makeKeyAndVisible];
     
-    AAAAudioFile *audioFile = [[AAAAudioFile alloc] init];
-    SInt16* packets = [audioFile open:[[NSBundle mainBundle] pathForResource:@"50Hz_-3dBFS_6s" ofType:@"wav"] ofType:@"wav"];
-
-    FFTManager *fftManager = [[FFTManager alloc] init];
-    [fftManager performFFT:packets ByteCount:audioFile.byteCount];
-    
     return YES;
 }
 

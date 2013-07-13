@@ -14,6 +14,14 @@
 
 #import "GSGraph.h"
 
+#define CLAMP(x, low, high) (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
+
+@interface FFTManager(Private)
+
+- (void)plotBetweenStartingPacket:(int)sp EndWithPacket:(int)ep forPackets:(double *)packets;
+
+@end
+
 @implementation FFTManager
 
 const int sampleFreq = 44100;
@@ -23,24 +31,27 @@ const float subFrameFract = .60f;
 const int numSamplesPerSubFrame = numSamplesPerFrame * subFrameFract;
 const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
 
-- (void)performFFT:(SInt16 *)packets ByteCount:(int) byteCount
+- (void)performFFT:(SInt16 *)packets PacketCount:(int)packetCount
 {
     
     // initialize butter worth filter with 1k cuttoff
-    AAAButterLow *bLow = [[AAAButterLow alloc] initWithSampleFreq:44100.0f CutoffFreq:1000.0f];
-    int dataLength = byteCount/ sizeof(packets);
+//    AAAButterLow *bLow = [[AAAButterLow alloc] initWithSampleFreq:44100.0f CutoffFreq:1000.0f];
+//    int dataLength = byteCount/ sizeof(packets);
+//    
+//    float* floatData = (float*) malloc(dataLength * sizeof(float));
+//    vDSP_vflt16(packets, 1, floatData, 1, dataLength);
+//    float* filteredResult = (float*) malloc(dataLength * sizeof(float));
+//
+//    [bLow filterArray:floatData DataLength:dataLength ResultArray:filteredResult ResultLength:dataLength];
+//    [self performCrossCorrelation:filteredResult NumSamples: dataLength];
     
-    float* floatData = (float*) malloc(dataLength * sizeof(float));
-    vDSP_vflt16(packets, 1, floatData, 1, dataLength);
-    float* filteredResult = (float*) malloc(dataLength * sizeof(float));
-
-    [bLow filterArray:floatData DataLength:dataLength ResultArray:filteredResult ResultLength:dataLength];
-    [self performCrossCorrelation:filteredResult NumSamples: dataLength];
+    // ------------------------------------------------------------------------
     
-    const int log2n = 13;
-    const int n = (sizeof(packets) / sizeof(SInt16)) << log2n; // multiply size by 2^log2n
+    const int log2n = ceil(log2(packetCount));
+    const int n = (int) pow(2, log2n);
     const int nOver2 = n / 2;
-    NSLog(@"%ld %ld %d", sizeof(packets), sizeof(SInt16), n);
+    NSLog(@"n = %d", n);
+//    NSLog(@"~log2(byteCount) = %d", (int) floor(log2(packetCount)));
     
     // An opaque type that contains setup information for a given double-precision FFT transform.
     FFTSetupD fftSetup = vDSP_create_fftsetupD(log2n, kFFTRadix2);
@@ -53,6 +64,17 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     for (int k = 0; k < n; k++) {
         input[k] = (double)packets[k];
     }
+    
+    double *window = new double[n];
+    vDSP_hann_windowD(window, n, vDSP_HANN_NORM);
+    
+    for (int i = 0; i < n; i++) {
+        input[i] *= window[i];
+    }
+    
+//    [self plotBetweenStartingPacket:(int) floor(44100.0 * 0.577394) EndWithPacket:(int) ceil(44100.0 * 1.284811) forPackets:input];
+
+//    [self performVoiceAnalysisOn:input];
     
     // We need complex buffers for real and imaginary parts. These buffers efficiently store values
     // by getting rid of redundant values in real and imaginary parts of complex numbers.
@@ -68,15 +90,22 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
 
     // Computes an in-place single-precision real discrete Fourier transform,
     // from the time domain to the frequency domain (forward).
-    vDSP_fft_zripD(fftSetup, &splitComplex, 1, log2n, kFFTDirection_Forward);
+    vDSP_fft_zripD(fftSetup, &splitComplex, 1, 15, kFFTDirection_Forward);
     
-    double window[nOver2];
-    vDSP_hann_windowD(window, nOver2, vDSP_HANN_NORM);
+    splitComplex.realp[0] = 0;
+    splitComplex.realp[nOver2] = 0;
     
-    for (int i = 0; i < nOver2; i++) {
-        splitComplex.realp[i] *= window[i];
-    }
-
+//    // For graphing values
+//    NSMutableArray *xValues = [[NSMutableArray alloc] init];
+//    NSMutableArray *yValues = [[NSMutableArray alloc] init];
+//    for (int i = 0; i < 512; i++) {
+//        xValues[i] = [NSNumber numberWithInt:i * 256];
+//        yValues[i] = [NSNumber numberWithDouble:abs(splitComplex.realp[i * 256])];
+//        printf("%d %.3d\n", i * 256, abs(splitComplex.realp[i * 256]));
+//    }
+//    GSGraph *graph = [[GSGraph alloc] initWithXValues:xValues YValues:yValues withContext:UIGraphicsGetCurrentContext()];
+//    [graph drawAxisLines];
+//    [graph plotXAndYValues];
     
     // For polar coordinates
     double *mag = new double[nOver2];
@@ -92,6 +121,20 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     vDSP_vsaddD(tmpData, 1, &mAdjust0BD, tmpData, 1, nOver2);
     vDSP_vdbconD(tmpData, 1, &one, tmpData, 1, nOver2, 0);
     
+//    [self plotBetweenStartingPacket:(int) floor(44100.0 * 0.577394) EndWithPacket:(int) ceil(44100.0 * 1.284811) forPackets:tmpData];
+    [self plotBetweenStartingPacket:0 EndWithPacket:nOver2 forPackets:tmpData];
+    
+//    // For graphing values
+//    NSMutableArray *xValues = [[NSMutableArray alloc] init];
+//    NSMutableArray *yValues = [[NSMutableArray alloc] init];
+//    for (int i = 0; i < 512; i++) {
+//        xValues[i] = [NSNumber numberWithInt:i * 256];
+//        yValues[i] = [NSNumber numberWithDouble:abs(tmpData[i * 256])];
+//    }
+//    GSGraph *graph = [[GSGraph alloc] initWithXValues:xValues YValues:yValues withContext:UIGraphicsGetCurrentContext()];
+//    [graph drawAxisLines];
+//    [graph plotXAndYValues];
+    
     // Get complex vector absolute values
     vDSP_zvabsD(&splitComplex, 1, mag, 1, nOver2);
     // Get complex vector phase
@@ -99,18 +142,6 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     
     splitComplex.realp = mag;
     splitComplex.imagp = phase;
-    
-    // For graphing values
-//    NSMutableArray *xValues = [[NSMutableArray alloc] init];
-//    NSMutableArray *yValues = [[NSMutableArray alloc] init];
-//    for (int i = 0; i < nOver2 / 2; i++) {
-//        xValues[i] = [NSNumber numberWithInt:i];
-//        yValues[i] = [NSNumber numberWithDouble:tmpData[i]];
-////        printf("%d %f\n", i, tmpData[i]);
-//    }
-//    GSGraph *graph = [[GSGraph alloc] initWithXValues:xValues YValues:yValues withContext:UIGraphicsGetCurrentContext()];
-//    [graph drawAxisLines];
-//    [graph plotXAndYValues];
 
     // Convert from polar coords back to rectangular coords
     vDSP_ztocD(&splitComplex, 1, complex, 2, nOver2);
@@ -120,24 +151,23 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     // Computes an in-place single-precision real discrete Fourier transform,
     // from the frequency domain to the time domain (inverse).
     vDSP_fft_zripD(fftSetup, &splitComplex, 1, log2n, kFFTDirection_Inverse);
-
-    // Unpack the result into a real vector
-    vDSP_ztocD(&splitComplex, 1, (DSPDoubleComplex *)output, 2, nOver2);
-
+    
     // Compensate for scaling for both FFTs. See Apple's vDSP documentation
     // to see how much scaling is required.
     // NOTE: Apple scales values to increase the efficiency of their functions.
     // As such, we have to scale them back.
-    double scale = 1.0 / n;
+    double scale = 1.0 / (2 * n);
     vDSP_vsmulD(output, 1, &scale, output, 1, nOver2);
+    
+    // Unpack the result into a real vector
+    vDSP_ztocD(&splitComplex, 1, (DSPDoubleComplex *)output, 2, nOver2);
     
 //    // For graphing values
 //    NSMutableArray *xValues = [[NSMutableArray alloc] init];
 //    NSMutableArray *yValues = [[NSMutableArray alloc] init];
-//    for (int i = 0; i < nOver2; i++) {
-//        xValues[i] = [NSNumber numberWithInt:i];
-//        yValues[i] = [NSNumber numberWithDouble:output[i]];
-//        printf("%d %f\n", i, output[i]);
+//    for (int i = 0; i < 2048; i++) {
+//        xValues[i] = [NSNumber numberWithInt:i * 256];
+//        yValues[i] = [NSNumber numberWithDouble:output[i * 256]];
 //    }
 //    GSGraph *graph = [[GSGraph alloc] initWithXValues:xValues YValues:yValues withContext:UIGraphicsGetCurrentContext()];
 //    [graph drawAxisLines];
@@ -146,6 +176,23 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     // Destroy the fft setup to avoid memory leakage
     vDSP_destroy_fftsetupD(fftSetup);
 }
+
+- (void)plotBetweenStartingPacket:(int)sp EndWithPacket:(int)ep forPackets:(double *)packets
+{
+    NSMutableArray *xValues = [[NSMutableArray alloc] init];
+    NSMutableArray *yValues = [[NSMutableArray alloc] init];
+    int range = ep - sp;
+    int resolution = (int) ceil(log2(range));
+    resolution = CLAMP(resolution, 10, 20);
+    for (int i = 0, index = sp; index < ep; i++, index += resolution) {
+        xValues[i] = [NSNumber numberWithInt:index];
+        yValues[i] = [NSNumber numberWithDouble:abs(packets[index])];
+    }
+    GSGraph *graph = [[GSGraph alloc] initWithXValues:xValues YValues:yValues withContext:UIGraphicsGetCurrentContext()];
+    [graph drawAxisLines];
+    [graph plotXAndYValues];
+}
+
 - (void)performCrossCorrelation:(float *)packets NumSamples:(int) numSamples {
     
     
@@ -174,13 +221,13 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
         [peakValues addObject:[NSNumber numberWithInt:[self findPitchPeakFreq:resultWindow NumFrames:diffSubandFrame]]];
     }
     
-    NSMutableArray *xValues = [[NSMutableArray alloc] init];
-    for (int i = 0; i < peakValues.count; i++) {
-        xValues[i] = [NSNumber numberWithInt:i];
-    }
-    GSGraph *graph = [[GSGraph alloc] initWithXValues:xValues YValues:peakValues withContext:UIGraphicsGetCurrentContext()];
-    [graph drawAxisLines];
-    [graph plotXAndYValues];
+//    NSMutableArray *xValues = [[NSMutableArray alloc] init];
+//    for (int i = 0; i < peakValues.count; i++) {
+//        xValues[i] = [NSNumber numberWithInt:i];
+//    }
+//    GSGraph *graph = [[GSGraph alloc] initWithXValues:xValues YValues:peakValues withContext:UIGraphicsGetCurrentContext()];
+//    [graph drawAxisLines];
+//    [graph plotXAndYValues];
    
 }
 
@@ -225,6 +272,55 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
         }
         return 0;
     }
+}
+
+- (void)performVoiceAnalysisOn:(double *)frames
+{
+    const int p = 2048;
+    const int lenResult = 2 * p - 1;
+    double *resultsArray = new double[lenResult];
+
+    vDSP_convD(frames, 1, frames, 1, resultsArray, 1, lenResult, p); // Auto Correlation
+    NSLog(@"Autocorrelation:\n");
+    for (int i = 0; i < lenResult; i++) {
+        NSLog(@"%d = %.3f", i, resultsArray[i]);
+    }
+    
+    // For graphing values
+    NSMutableArray *xValues = [[NSMutableArray alloc] init];
+    NSMutableArray *yValues = [[NSMutableArray alloc] init];
+    for (int i = 0; i < p; i++) {
+        xValues[i] = [NSNumber numberWithInt:i];
+        yValues[i] = [NSNumber numberWithDouble:resultsArray[i]];
+    }
+    GSGraph *graph = [[GSGraph alloc] initWithXValues:xValues YValues:yValues withContext:UIGraphicsGetCurrentContext()];
+    [graph drawAxisLines];
+    [graph plotXAndYValues];
+    
+    
+    long int N = p, NRHS = p, LDA = p, LDB = p, INFO;
+    long int IPIV[p];
+    // N -> Number of linear equations, i.e. number of rows for a square matrix A
+    // NRHS -> Number of right-hand sides, i.e. number of columns for a matrix B
+    // A -> Coefficient matrix A
+    // LDA -> Dimension of array A, LDA >= max(1, N)
+    // IPIV -> Integer array with dimension N. Pivot indices that define the permutation matrix P.
+    // B -> The array B with dimension LDB, NRHS
+    // LDB -> Leading dimension of array B, LDB >= max(1, N)
+    // INFO -> Status
+    //          = 0:  successful exit
+    //          < 0:  if INFO = -i, the i-th argument had an illegal value
+    //          > 0:  if INFO = i, U(i,i) is exactly zero.  The factorization
+    //                has been completed, but the factor U is exactly
+    //                singular, so the solution could not be computed.
+//    dgesv_(&N, &NRHS, coeffArray, &LDA, IPIV, corrResults, &LDB, &INFO);
+    
+//    NSLog(@"Status: %ld", INFO);
+    
+//    NSLog(@"After:\n");
+//    for (int a = 0; a < p; a++) {
+//        NSLog(@"%.3f ", corrResults[a]);
+//    }
 }
 
 @end

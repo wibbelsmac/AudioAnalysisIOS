@@ -16,6 +16,7 @@
 @property (nonatomic) double minValue;
 
 - (id)initWithStartPoint:(CGPoint)start endPoint:(CGPoint)end inContext:(CGContextRef)context;
-- (void)drawAxisLine;
+- (void)drawAxis;
+- (void)validate;
 
 @end

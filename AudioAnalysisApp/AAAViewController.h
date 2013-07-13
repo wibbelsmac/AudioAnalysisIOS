@@ -8,6 +8,10 @@
 
 #import <UIKit/UIKit.h>
 
+#import "PlotView.h"
+
 @interface AAAViewController : UIViewController
+
+@property (nonatomic, weak) IBOutlet PlotView *plotView;
 
 @end

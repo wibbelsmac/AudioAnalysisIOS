@@ -11,7 +11,7 @@
 
 @interface FFTManager : NSObject
 
-- (void)performFFT:(SInt16 *)packets ByteCount:(int) byteCount;
-- (void)performCrossCorrelation:(float *)packets ByteCount:(int) byteCount;
+- (void)performFFT:(SInt16 *)packets PacketCount:(int)packetCount;
+- (void)performVoiceAnalysisOn:(double *)frames;
 
 @end

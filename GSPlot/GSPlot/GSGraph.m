@@ -8,12 +8,13 @@
 
 #import "GSGraph.h"
 
-const double kGraphMargin = 10.0;
+const double kGraphMargin = 25.0;
 
 @interface GSGraph(Private)
 
 - (double)getScreenRangeForNegativeValuesWith:(double)firstNum and:(double)secondNum forRange:(double)range;
 - (double)scaleValueToViewCoordinates:(double)value forAxis:(AxisType)axis;
+- (void)drawGrid;
 
 @end
 
@@ -64,6 +65,7 @@ const double kGraphMargin = 10.0;
         [self.xAxisLine setMinValue:smallestX];
         [self.xAxisLine setMaxValue:largestX];
         [self.xAxisLine setWidth:2.0f];
+        [self.xAxisLine validate];
         
         // Create the y-axis based on the input values.
         if (smallestX >= 0) {
@@ -75,6 +77,7 @@ const double kGraphMargin = 10.0;
         [self.yAxisLine setMinValue:smallestY];
         [self.yAxisLine setMaxValue:largestY];
         [self.yAxisLine setWidth:2.0f];
+        [self.yAxisLine validate];
         
         self.zeroPoint = CGPointMake([self.yAxisLine startPoint].x, [self.xAxisLine startPoint].y);
     }
@@ -90,8 +93,9 @@ const double kGraphMargin = 10.0;
 
 - (void)drawAxisLines
 {
-    [self.xAxisLine drawAxisLine];
-    [self.yAxisLine drawAxisLine];
+    [self.xAxisLine drawAxis];
+    [self.yAxisLine drawAxis];
+    [self drawGrid];
 }
 
 - (void)plotXAndYValues
@@ -118,6 +122,25 @@ const double kGraphMargin = 10.0;
             numerator = ([self.yAxisLine endPoint].y - [self.yAxisLine startPoint].y) * (value - [self.yAxisLine minValue]);
             denominator = [self.yAxisLine maxValue] - [self.yAxisLine minValue];
             return (numerator / denominator) + [self.yAxisLine startPoint].y;
+    }
+}
+
+- (void)drawGrid
+{
+    CGContextSetStrokeColorWithColor(self.currentContext, [UIColor grayColor].CGColor);
+    
+    GSAxisLine *xAxis = self.xAxisLine;
+    GSAxisLine *yAxis = self.yAxisLine;
+    for (int i = 1; i < 11; i++) {
+        CGContextMoveToPoint(self.currentContext, yAxis.startPoint.x, yAxis.startPoint.y - yAxis.majorIndicatorSize * i);
+        CGContextAddLineToPoint(self.currentContext, xAxis.endPoint.x, yAxis.startPoint.y - yAxis.majorIndicatorSize * i);
+        CGContextStrokePath(self.currentContext);
+    }
+    
+    for (int j = 1; j < 15; j++) {
+        CGContextMoveToPoint(self.currentContext, yAxis.startPoint.x + yAxis.majorIndicatorSize * j, xAxis.startPoint.y);
+        CGContextAddLineToPoint(self.currentContext, yAxis.startPoint.x + yAxis.majorIndicatorSize * j, yAxis.endPoint.y);
+        CGContextStrokePath(self.currentContext);
     }
 }
 
