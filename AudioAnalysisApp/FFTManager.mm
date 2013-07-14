@@ -36,7 +36,6 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
 
     [bLow filterArray:floatData DataLength:dataLength ResultArray:filteredResult ResultLength:dataLength];
     [self performCrossCorrelation:filteredResult NumSamples: dataLength];
-    
     const int log2n = 13;
     const int n = (sizeof(packets) / sizeof(SInt16)) << log2n; // multiply size by 2^log2n
     const int nOver2 = n / 2;
@@ -226,5 +225,7 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
         return 0;
     }
 }
+
+
 
 @end

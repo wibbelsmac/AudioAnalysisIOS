@@ -8,11 +8,11 @@
          ignoreCount = "0"
          continueAfterRunningActions = "No"
          filePath = "AudioAnalysisApp/FFTManager.mm"
-         timestampString = "395165495.045713"
+         timestampString = "395444245.119218"
          startingColumnNumber = "9223372036854775807"
          endingColumnNumber = "9223372036854775807"
-         startingLineNumber = "209"
-         endingLineNumber = "209"
+         startingLineNumber = "208"
+         endingLineNumber = "208"
          landmarkName = "-findPitchPeakFreq:NumFrames:"
          landmarkType = "5">
       </FileBreakpoint>
@@ -21,7 +21,20 @@
          ignoreCount = "0"
          continueAfterRunningActions = "No"
          filePath = "AudioAnalysisApp/FFTManager.mm"
-         timestampString = "395013742.914698"
+         timestampString = "395444245.119218"
+         startingColumnNumber = "9223372036854775807"
+         endingColumnNumber = "9223372036854775807"
+         startingLineNumber = "40"
+         endingLineNumber = "40"
+         landmarkName = "-performFFT:ByteCount:"
+         landmarkType = "5">
+      </FileBreakpoint>
+      <FileBreakpoint
+         shouldBeEnabled = "Yes"
+         ignoreCount = "0"
+         continueAfterRunningActions = "No"
+         filePath = "AudioAnalysisApp/FFTManager.mm"
+         timestampString = "395444245.119218"
          startingColumnNumber = "9223372036854775807"
          endingColumnNumber = "9223372036854775807"
          startingLineNumber = "41"
@@ -34,24 +47,11 @@
          ignoreCount = "0"
          continueAfterRunningActions = "No"
          filePath = "AudioAnalysisApp/FFTManager.mm"
-         timestampString = "395013747.275339"
+         timestampString = "395444245.119218"
          startingColumnNumber = "9223372036854775807"
          endingColumnNumber = "9223372036854775807"
-         startingLineNumber = "42"
-         endingLineNumber = "42"
-         landmarkName = "-performFFT:ByteCount:"
-         landmarkType = "5">
-      </FileBreakpoint>
-      <FileBreakpoint
-         shouldBeEnabled = "Yes"
-         ignoreCount = "0"
-         continueAfterRunningActions = "No"
-         filePath = "AudioAnalysisApp/FFTManager.mm"
-         timestampString = "395165187.993279"
-         startingColumnNumber = "9223372036854775807"
-         endingColumnNumber = "9223372036854775807"
-         startingLineNumber = "219"
-         endingLineNumber = "219"
+         startingLineNumber = "218"
+         endingLineNumber = "218"
          landmarkName = "-findPitchPeakFreq:NumFrames:"
          landmarkType = "5">
       </FileBreakpoint>
