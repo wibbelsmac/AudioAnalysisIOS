@@ -11,7 +11,17 @@
 
 @interface FFTManager : NSObject
 
-- (void)performFFT:(SInt16 *)packets ByteCount:(int) byteCount;
-- (void)performCrossCorrelation:(float *)packets ByteCount:(int) byteCount;
+@property (nonatomic) FFTSetupD fftSetup;
+@property (nonatomic) int mLog2N;
+@property (nonatomic) int mNumberOfPackets;
+@property (nonatomic) int mFFTLength;
+@property (nonatomic) double *mAudioBuffer;
+@property (nonatomic) DSPDoubleSplitComplex mSplitComplex;
 
+- (id)initWithPackets:(SInt16 *)packets PacketCount:(int)packetCount;
+- (void)performFFTOnRangeStartingAt:(int)sp EndingAt:(int)ep;
+- (void)performVoiceAnalysisOn:(double *)frames;
+- (void)performCrossCorrelation:(float *)packets NumSamples:(int) numSamples;
+-(void) FindLinearPredictionCoeffwithFrameArray:(float*) frame ResultArray:(float*) result Order:(int) p FrameLength:(int) frameLength;
+-(float*) crreatZeroBufferedwindowNonZeroLength:(int) nonZerloLengh ZeroLeng:(int)zeroPadding Data:(float*) data;
 @end

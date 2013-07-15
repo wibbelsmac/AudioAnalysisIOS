@@ -11,7 +11,8 @@
 #import "AAAAudioFile.h"
 
 @implementation AAAAudioFile
-@synthesize byteCount;
+
+@synthesize packetCount;
 
 - (SInt16 *)open:(NSString *)fileName ofType:(NSString *)fileType
 {
@@ -31,25 +32,32 @@
     UInt32 size = sizeof(mASBD);
     result = AudioFileGetProperty(mAudioFile, kAudioFilePropertyDataFormat, &size, &mASBD);
     
-    UInt32 packetCount;
-    UInt32 dataSize = sizeof(packetCount);
-    result = AudioFileGetProperty(mAudioFile, kAudioFilePropertyAudioDataPacketCount, &dataSize, &packetCount);
-    NSLog(@"File Opened, packet count is %d", (unsigned int)packetCount);
+    UInt64 fileSize;
+    size = sizeof(fileSize);
+    result = AudioFileGetProperty(mAudioFile, kAudioFilePropertyAudioDataByteCount, &size, &fileSize);
+    NSLog(@"File size is %d bytes or %.2f megabytes", (unsigned int)fileSize, (float)fileSize * 9.53674e-7);
     
-    UInt32 packetsRead = packetCount;
+    UInt32 packets = (UInt32) fileSize / mASBD.mBytesPerPacket;
+    const int log2n = ceil(log2(packets));
+    const int sizeOfPacketArray = (int) pow(2, log2n);
+    
+    UInt32 packetsRead = packets;
     UInt32 numBytesRead = -1;
     SInt16 *audioData = nil;
-    if (packetCount > 0) {
+    if (packets > 0) {
         // Allocate Buffer
-        audioData = (SInt16 *) malloc(2 * packetCount);
+        audioData = (SInt16 *) malloc(sizeOfPacketArray * sizeof(SInt16));
 
         // Read the Packets
         result = AudioFileReadPackets(mAudioFile, false, &numBytesRead, NULL, 0, &packetsRead, audioData);
-        self.byteCount = numBytesRead;
-        NSLog(@"Read %d bytes, %d packets", (unsigned int)numBytesRead, (unsigned int)packetsRead);
+        self.packetCount = packetsRead;
+        NSLog(@"Read %d bytes or %d packets", (unsigned int)numBytesRead, (unsigned int)packetsRead);
         
+        for (int j = packetsRead; j < sizeOfPacketArray; j++) {
+            audioData[j] = 0;
+        }
     }
-        
+    
     CFRelease(audioFileURL);
     return audioData;
 }

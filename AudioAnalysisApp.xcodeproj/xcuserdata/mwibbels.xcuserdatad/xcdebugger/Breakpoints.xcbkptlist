@@ -8,12 +8,12 @@
          ignoreCount = "0"
          continueAfterRunningActions = "No"
          filePath = "AudioAnalysisApp/FFTManager.mm"
-         timestampString = "395444245.119218"
+         timestampString = "395543996.523521"
          startingColumnNumber = "9223372036854775807"
          endingColumnNumber = "9223372036854775807"
-         startingLineNumber = "208"
-         endingLineNumber = "208"
-         landmarkName = "-findPitchPeakFreq:NumFrames:"
+         startingLineNumber = "213"
+         endingLineNumber = "213"
+         landmarkName = "-plotRange:forPackets:"
          landmarkType = "5">
       </FileBreakpoint>
       <FileBreakpoint
@@ -21,12 +21,25 @@
          ignoreCount = "0"
          continueAfterRunningActions = "No"
          filePath = "AudioAnalysisApp/FFTManager.mm"
-         timestampString = "395444245.119218"
+         timestampString = "395543546.72056"
+         startingColumnNumber = "9223372036854775807"
+         endingColumnNumber = "9223372036854775807"
+         startingLineNumber = "39"
+         endingLineNumber = "39"
+         landmarkName = "-initWithPackets:PacketCount:"
+         landmarkType = "5">
+      </FileBreakpoint>
+      <FileBreakpoint
+         shouldBeEnabled = "Yes"
+         ignoreCount = "0"
+         continueAfterRunningActions = "No"
+         filePath = "AudioAnalysisApp/FFTManager.mm"
+         timestampString = "395543546.72056"
          startingColumnNumber = "9223372036854775807"
          endingColumnNumber = "9223372036854775807"
          startingLineNumber = "40"
          endingLineNumber = "40"
-         landmarkName = "-performFFT:ByteCount:"
+         landmarkName = "-initWithPackets:PacketCount:"
          landmarkType = "5">
       </FileBreakpoint>
       <FileBreakpoint
@@ -34,12 +47,12 @@
          ignoreCount = "0"
          continueAfterRunningActions = "No"
          filePath = "AudioAnalysisApp/FFTManager.mm"
-         timestampString = "395444245.119218"
+         timestampString = "395543996.523521"
          startingColumnNumber = "9223372036854775807"
          endingColumnNumber = "9223372036854775807"
-         startingLineNumber = "41"
-         endingLineNumber = "41"
-         landmarkName = "-performFFT:ByteCount:"
+         startingLineNumber = "223"
+         endingLineNumber = "223"
+         landmarkName = "-plotRange:forPackets:"
          landmarkType = "5">
       </FileBreakpoint>
       <FileBreakpoint
@@ -47,12 +60,116 @@
          ignoreCount = "0"
          continueAfterRunningActions = "No"
          filePath = "AudioAnalysisApp/FFTManager.mm"
-         timestampString = "395444245.119218"
+         timestampString = "395543996.523521"
          startingColumnNumber = "9223372036854775807"
          endingColumnNumber = "9223372036854775807"
-         startingLineNumber = "218"
-         endingLineNumber = "218"
-         landmarkName = "-findPitchPeakFreq:NumFrames:"
+         startingLineNumber = "361"
+         endingLineNumber = "361"
+         landmarkName = "-FindLinearPredictionCoeffwithFrameArray:ResultArray:Order:FrameLength:"
+         landmarkType = "5">
+      </FileBreakpoint>
+      <FileBreakpoint
+         shouldBeEnabled = "Yes"
+         ignoreCount = "0"
+         continueAfterRunningActions = "No"
+         filePath = "AudioAnalysisApp/FFTManager.mm"
+         timestampString = "395545741.048135"
+         startingColumnNumber = "9223372036854775807"
+         endingColumnNumber = "9223372036854775807"
+         startingLineNumber = "388"
+         endingLineNumber = "388"
+         landmarkName = "-FindLinearPredictionCoeffwithFrameArray:ResultArray:Order:FrameLength:"
+         landmarkType = "5">
+      </FileBreakpoint>
+      <FileBreakpoint
+         shouldBeEnabled = "Yes"
+         ignoreCount = "0"
+         continueAfterRunningActions = "No"
+         filePath = "AudioAnalysisApp/FFTManager.mm"
+         timestampString = "395543978.010786"
+         startingColumnNumber = "9223372036854775807"
+         endingColumnNumber = "9223372036854775807"
+         startingLineNumber = "47"
+         endingLineNumber = "47"
+         landmarkName = "-initWithPackets:PacketCount:"
+         landmarkType = "5">
+      </FileBreakpoint>
+      <FileBreakpoint
+         shouldBeEnabled = "Yes"
+         ignoreCount = "0"
+         continueAfterRunningActions = "No"
+         filePath = "AudioAnalysisApp/FFTManager.mm"
+         timestampString = "395544040.45702"
+         startingColumnNumber = "9223372036854775807"
+         endingColumnNumber = "9223372036854775807"
+         startingLineNumber = "48"
+         endingLineNumber = "48"
+         landmarkName = "-initWithPackets:PacketCount:"
+         landmarkType = "5">
+      </FileBreakpoint>
+      <FileBreakpoint
+         shouldBeEnabled = "Yes"
+         ignoreCount = "0"
+         continueAfterRunningActions = "No"
+         filePath = "AudioAnalysisApp/FFTManager.mm"
+         timestampString = "395544049.19947"
+         startingColumnNumber = "9223372036854775807"
+         endingColumnNumber = "9223372036854775807"
+         startingLineNumber = "365"
+         endingLineNumber = "365"
+         landmarkName = "-FindLinearPredictionCoeffwithFrameArray:ResultArray:Order:FrameLength:"
+         landmarkType = "5">
+      </FileBreakpoint>
+      <FileBreakpoint
+         shouldBeEnabled = "Yes"
+         ignoreCount = "0"
+         continueAfterRunningActions = "No"
+         filePath = "AudioAnalysisApp/FFTManager.mm"
+         timestampString = "395544064.279032"
+         startingColumnNumber = "9223372036854775807"
+         endingColumnNumber = "9223372036854775807"
+         startingLineNumber = "372"
+         endingLineNumber = "372"
+         landmarkName = "-FindLinearPredictionCoeffwithFrameArray:ResultArray:Order:FrameLength:"
+         landmarkType = "5">
+      </FileBreakpoint>
+      <FileBreakpoint
+         shouldBeEnabled = "Yes"
+         ignoreCount = "0"
+         continueAfterRunningActions = "No"
+         filePath = "AudioAnalysisApp/FFTManager.mm"
+         timestampString = "395545741.048135"
+         startingColumnNumber = "9223372036854775807"
+         endingColumnNumber = "9223372036854775807"
+         startingLineNumber = "383"
+         endingLineNumber = "383"
+         landmarkName = "-FindLinearPredictionCoeffwithFrameArray:ResultArray:Order:FrameLength:"
+         landmarkType = "5">
+      </FileBreakpoint>
+      <FileBreakpoint
+         shouldBeEnabled = "Yes"
+         ignoreCount = "0"
+         continueAfterRunningActions = "No"
+         filePath = "AudioAnalysisApp/FFTManager.mm"
+         timestampString = "395545741.048135"
+         startingColumnNumber = "9223372036854775807"
+         endingColumnNumber = "9223372036854775807"
+         startingLineNumber = "377"
+         endingLineNumber = "377"
+         landmarkName = "-FindLinearPredictionCoeffwithFrameArray:ResultArray:Order:FrameLength:"
+         landmarkType = "5">
+      </FileBreakpoint>
+      <FileBreakpoint
+         shouldBeEnabled = "No"
+         ignoreCount = "0"
+         continueAfterRunningActions = "No"
+         filePath = "AudioAnalysisApp/FFTManager.mm"
+         timestampString = "395546211.858686"
+         startingColumnNumber = "9223372036854775807"
+         endingColumnNumber = "9223372036854775807"
+         startingLineNumber = "380"
+         endingLineNumber = "380"
+         landmarkName = "-FindLinearPredictionCoeffwithFrameArray:ResultArray:Order:FrameLength:"
          landmarkType = "5">
       </FileBreakpoint>
    </FileBreakpoints>
