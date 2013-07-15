@@ -173,7 +173,6 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     vDSP_vsmulD(_mAudioBuffer, 1, &scale, _mAudioBuffer, 1, _mLog2N);
     
 //    [self plotRange:ep - sp forPackets:_mAudioBuffer];
-    
     free(_mSplitComplex.realp);
     free(_mSplitComplex.imagp);
 }
@@ -410,6 +409,84 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
                     result[i]+= filter[j -1] * powf(data[i], -1.0 * j);
                 }
 }
+
+-(void) preformFFTForward:(double**)data Length:(int*) length {
+    unsigned long log2N = ceil(log2(*length));
+    if(log2N != *length) {
+        double* tempStorage = (double*) calloc(0, sizeof(double) * log2N);
+        memcpy(tempStorage, data, sizeof(double) * (*length));
+       free(*data);
+        *data = tempStorage;
+        *length = log2N;
+    }
+    int pow2length = (int) pow(2, log2N);
+    int pow2lengthOver2 = pow2length / 2;
+    FFTSetupD tempSetup = vDSP_create_fftsetupD(log2N, kFFTRadix2);
+    
+    // We need complex buffers for real and imaginary parts. These buffers efficiently store values
+    // by getting rid of redundant values in real and imaginary parts of complex numbers.
+    DSPDoubleSplitComplex* tempSplitComplex = new DSPDoubleSplitComplex;
+    tempSplitComplex->realp = (double *) calloc(pow2lengthOver2, sizeof(double));
+    tempSplitComplex->imagp = (double *) calloc(pow2lengthOver2, sizeof(double));
+    
+    // Transforms the real array input = {A[0],..., A[n]} into an even-odd
+    // array splitComplex = {A[0], A[2],..., A[n-1], A[1], A[3],..., A[n]}.
+    // splitComplex stores the imaginary and real parts in separate arrays
+    vDSP_ctozD((DSPDoubleComplex *)data, 2, tempSplitComplex, 1, pow2lengthOver2);
+    
+    // Computes an in-place single-precision real discrete Fourier transform,
+    // from the time domain to the frequency domain (forward).
+    vDSP_fft_zripD(tempSetup, tempSplitComplex, 1, log2N, kFFTDirection_Forward);
+    // Unpack the result into a real vector
+    vDSP_ztocD(tempSplitComplex, 1, (DSPDoubleComplex *)data, 2, log2N);
+    free(tempSplitComplex->realp);
+    free(tempSplitComplex->imagp);
+}
+
+-(void) preformFFTInverse:(double**)data Length:(int*) length {
+    unsigned long log2N = ceil(log2(*length));
+    if(log2N != *length) {
+//        double* tempStorage = (double*) calloc(0, sizeof(double) * log2N);
+//        memcpy(tempStorage, data, sizeof(double) * (*length));
+//        free(*data);
+//        *data = tempStorage;
+//        *length = log2N;
+        printf("ERROR input data is not power of 2");
+    }
+    int pow2length = (int) pow(2, log2N);
+    int pow2lengthOver2 = pow2length / 2;
+    FFTSetupD tempSetup = vDSP_create_fftsetupD(log2N, kFFTRadix2);
+    
+    // We need complex buffers for real and imaginary parts. These buffers efficiently store values
+    // by getting rid of redundant values in real and imaginary parts of complex numbers.
+    DSPDoubleSplitComplex* tempSplitComplex = new DSPDoubleSplitComplex;
+    tempSplitComplex->realp = (double *) calloc(pow2lengthOver2, sizeof(double));
+    tempSplitComplex->imagp = (double *) calloc(pow2lengthOver2, sizeof(double));
+    
+    // Transforms the real array input = {A[0],..., A[n]} into an even-odd
+    // array splitComplex = {A[0], A[2],..., A[n-1], A[1], A[3],..., A[n]}.
+    // splitComplex stores the imaginary and real parts in separate arrays
+    vDSP_ctozD((DSPDoubleComplex *)data, 2, tempSplitComplex, 1, pow2lengthOver2);
+    
+    // Computes an in-place single-precision real discrete Fourier transform,
+    // from the time domain to the frequency domain (forward).
+    vDSP_fft_zripD(tempSetup, tempSplitComplex, 1, log2N, kFFTDirection_Inverse);
+    free(tempSplitComplex->realp);
+    free(tempSplitComplex->imagp);
+}
+
+-(void) performHiltBerPhaseShifts:(double*)packedData Length:(int)length {
+    for(int i = 0; i < length/2; i++) {
+        packedData[i]*= -1.0000;
+    }
+    double temp;
+    for(int i = 2; i<length - 1; i+=2) {
+        temp = packedData[i];
+        packedData[i] = packedData[i+1];
+        packedData[i+1] = packedData[i];
+    }
+}
+
 
 //-(int)InvertMatrixWithLength:(int) n Matrix:(double*) matrix {
 //    int error=0;
