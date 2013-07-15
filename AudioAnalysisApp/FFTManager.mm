@@ -22,6 +22,9 @@
 - (void)plotRange:(int)range forPackets:(double *)packets;
 - (void)plotAllValuesStartingPacket:(int)sp EndWithPacket:(int)ep forPackets:(double *)packets;
 - (void)applyHanningWindowTo:(double *)values StartingAt:(int)sv EndingAt:(int)ev;
+-(void) FindLinearPredictionCoeffwithFrameArray:(double*) frame ResultArray:(double*) result Order:(int) p FrameLength:(int) frameLength;
+-(double*) crreatZeroBufferedwindowNonZeroLength:(int) nonZerloLengh ZeroLeng:(int)zeroPadding Data:(double*) data;
+- (void)performCrossCorrelation:(double *)packets NumSamples:(int) numSamples;
 
 @end
 
@@ -36,43 +39,6 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
 
 - (id)initWithPackets:(SInt16 *)packets PacketCount:(int)packetCount
 {
-    // initialize butter worth filter with 1k cuttoff
-    AAAButterLow *bLow = [[AAAButterLow alloc] initWithSampleFreq:44100.0f CutoffFreq:6000.0f];
-    int dataLength = packetCount;
-    
-    float* floatData = (float*) malloc(dataLength * sizeof(float));
-    vDSP_vflt16(packets, 1, floatData, 1, dataLength);
-
-    // calculating linear prediction coefficients
-    float* window = [self crreatZeroBufferedwindowNonZeroLength:numSamplesPerFrame ZeroLeng:10 Data:floatData];
-    float * lpc_coef = (float*) malloc(sizeof(float) * 10);
-    [self FindLinearPredictionCoeffwithFrameArray:window ResultArray:lpc_coef Order:10 FrameLength:numSamplesPerFrame];
-    
-//    [self inverseFilter: Result:(float*)result FilterCoefficients:(float*)filter
-//    ArrayLength:(int) al FilterLength:(int)fl]
-    
-    
-    float* filteredResult = (float*) malloc(dataLength * sizeof(float));
-
-    
-    [bLow filterArray:floatData DataLength:dataLength ResultArray:filteredResult ResultLength:dataLength];
-    [self performCrossCorrelation:filteredResult NumSamples: dataLength];
-    const int log2n = 13;
-    const int n = (sizeof(packets) / sizeof(SInt16)) << log2n; // multiply size by 2^log2n
-    const int nOver2 = n / 2;
-    NSLog(@"%ld %ld %d", sizeof(packets), sizeof(SInt16), n);
-    
-    // An opaque type that contains setup information for a given double-precision FFT transform.
-    FFTSetupD fftSetup = vDSP_create_fftsetupD(log2n, kFFTRadix2);
-
-    // Buffers for input signals before processing and output signals after processing
-    double *input = new double[n];
-    double *output = new double[n];
-    
-    // Initialize the input buffer with packets from the audio file
-    for (int k = 0; k < n; k++) {
-        input[k] = (double)packets[k];
-    }
     self = [super init];
     if (self) {
         _mLog2N = ceil(log2(packetCount));
@@ -89,92 +55,16 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
             _mAudioBuffer[k] = (double) packets[k];
         }
         free(packets);
+        
+        // calculating linear prediction coefficients
+        double* window = [self crreatZeroBufferedwindowNonZeroLength:numSamplesPerFrame ZeroLeng:10 Data:_mAudioBuffer];
+        double * lpc_coef = (double*) malloc(sizeof(double) * 10);
+        [self FindLinearPredictionCoeffwithFrameArray:window ResultArray:lpc_coef Order:10 FrameLength:numSamplesPerFrame];
+        
+        //    [self inverseFilter: Result:(double*)result FilterCoefficients:(double*)filter
+        //    ArrayLength:(int) al FilterLength:(int)fl]
     }
     return self;
-}
-
-- (void)performFFTOnRangeStartingAt:(int)sp EndingAt:(int)ep
-{
-    _mLog2N = ceil(log2(ep - sp));
-    _mNumberOfPackets = (int) pow(2, _mLog2N);
-    _mFFTLength = _mNumberOfPackets / 2;
-    
-    // We need complex buffers for real and imaginary parts. These buffers efficiently store values
-    // by getting rid of redundant values in real and imaginary parts of complex numbers.
-    _mSplitComplex.realp = (double *) calloc(_mFFTLength, sizeof(double));
-    _mSplitComplex.imagp = (double *) calloc(_mFFTLength, sizeof(double));
-    
-    // Transforms the real array input = {A[0],..., A[n]} into an even-odd
-    // array splitComplex = {A[0], A[2],..., A[n-1], A[1], A[3],..., A[n]}.
-    // splitComplex stores the imaginary and real parts in separate arrays
-    vDSP_ctozD((DSPDoubleComplex *)_mAudioBuffer, 2, &_mSplitComplex, 1, _mFFTLength);
-    
-    // Computes an in-place single-precision real discrete Fourier transform,
-    // from the time domain to the frequency domain (forward).
-    vDSP_fft_zripD(self.fftSetup, &_mSplitComplex, 1, _mLog2N, kFFTDirection_Forward);
-    
-    [self plotRange:ep - sp forPackets:_mAudioBuffer];
-    
-    double scale = 1.0 / (2 * _mNumberOfPackets);
-    vDSP_vsmulD(_mSplitComplex.realp, 1, &scale, _mSplitComplex.realp, 1, _mFFTLength);
-    vDSP_vsmulD(_mSplitComplex.imagp, 1, &scale, _mSplitComplex.imagp, 1, _mFFTLength);
-    
-    _mSplitComplex.realp[0] = 0; // zeroing out the DC value
-    _mSplitComplex.imagp[0] = 0; // zeroing out the Nyquist value
-    
-    double tmpData[_mFFTLength];
-    double mAdjust0BD = 1.5849e-13;
-    double one = 1.0;
-    
-    // Convert from complex/rectangular (real & imaginary) coordinates
-    // to polar (magnitude & phase) coordinates
-    vDSP_zvmagsD(&_mSplitComplex, 1, tmpData, 1, _mFFTLength);
-    vDSP_vsaddD(tmpData, 1, &mAdjust0BD, tmpData, 1, _mFFTLength);
-    vDSP_vdbconD(tmpData, 1, &one, tmpData, 1, _mFFTLength, 0);
-    
-    for (int i = 0; i < _mFFTLength; i++) {
-        if (tmpData[i] < 0.0) {
-            tmpData[i] = 0;
-        }
-    }
-    
-//    [self plotRange:_mFFTLength forPackets:tmpData];
-    
-    DSPDoubleComplex *complex = new DSPDoubleComplex[_mFFTLength];
-    
-    // For polar coordinates
-    double *mag = new double[_mFFTLength];
-    double *phase = new double[_mFFTLength];
-    
-    // Get complex vector absolute values
-    vDSP_zvabsD(&_mSplitComplex, 1, mag, 1, _mFFTLength);
-    // Get complex vector phase
-    vDSP_zvphasD(&_mSplitComplex, 1, phase, 1, _mFFTLength);
-    
-    _mSplitComplex.realp = mag;
-    _mSplitComplex.imagp = phase;
-    
-    // Convert from polar coords back to rectangular coords
-    vDSP_ztocD(&_mSplitComplex, 1, complex, 2, _mFFTLength);
-    vDSP_rectD((double *)complex, 2, (double *)complex, 2, _mFFTLength); // Polar to rectangular conversion
-    vDSP_ctozD(complex, 2, &_mSplitComplex, 1, _mFFTLength);
-    
-    // Computes an in-place single-precision real discrete Fourier transform,
-    // from the frequency domain to the time domain (inverse).
-    vDSP_fft_zripD(_fftSetup, &_mSplitComplex, 1, _mLog2N, kFFTDirection_Inverse);
-    
-    // Unpack the result into a real vector
-    vDSP_ztocD(&_mSplitComplex, 1, (DSPDoubleComplex *)_mAudioBuffer, 2, _mLog2N);
-    
-    // Compensate for scaling for both FFTs. See Apple's vDSP documentation
-    // to see how much scaling is required.
-    // NOTE: Apple scales values to increase the efficiency of their functions.
-    // As such, we have to scale them back.
-    vDSP_vsmulD(_mAudioBuffer, 1, &scale, _mAudioBuffer, 1, _mLog2N);
-    
-//    [self plotRange:ep - sp forPackets:_mAudioBuffer];
-    free(_mSplitComplex.realp);
-    free(_mSplitComplex.imagp);
 }
 
 - (void)applyHanningWindowTo:(double *)values StartingAt:(int)sv EndingAt:(int)ev
@@ -192,23 +82,6 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
 {
     vDSP_destroy_fftsetupD(_fftSetup);
     free(_mAudioBuffer);
-}
-
-- (void)performFFT:(SInt16 *)packets PacketCount:(int)packetCount
-{
-    
-    // initialize butter worth filter with 1k cuttoff
-//    AAAButterLow *bLow = [[AAAButterLow alloc] initWithSampleFreq:44100.0f CutoffFreq:1000.0f];
-//    int dataLength = byteCount/ sizeof(packets);
-//    
-//    float* floatData = (float*) malloc(dataLength * sizeof(float));
-//    vDSP_vflt16(packets, 1, floatData, 1, dataLength);
-//    float* filteredResult = (float*) malloc(dataLength * sizeof(float));
-//
-//    [bLow filterArray:floatData DataLength:dataLength ResultArray:filteredResult ResultLength:dataLength];
-//    [self performCrossCorrelation:filteredResult NumSamples: dataLength];
-    
-    // ------------------------------------------------------------------------
 }
 
 - (void)plotRange:(int)range forPackets:(double *)packets
@@ -239,16 +112,16 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     [graph plotXAndYValues];
 }
 
-- (void)performCrossCorrelation:(float *)packets NumSamples:(int) numSamples
+- (void)performCrossCorrelation:(double *)packets NumSamples:(int) numSamples
 {    
     const int sampleCount = numSamples;
     // Populate *window with the values for a hamming window function
-    float *hannWindow = (float *)malloc(sizeof(float) * numSamplesPerFrame);
-    float *tempSamples = (float *)malloc(sizeof(float) * numSamplesPerFrame);
-    float *subFrameSamples = (float *)malloc(sizeof(float) * numSamplesPerSubFrame);
-    float *resultWindow = (float *)malloc(sizeof(float) * diffSubandFrame);
+    double *hannWindow = (double *)malloc(sizeof(double) * numSamplesPerFrame);
+    double *tempSamples = (double *)malloc(sizeof(double) * numSamplesPerFrame);
+    double *subFrameSamples = (double *)malloc(sizeof(double) * numSamplesPerSubFrame);
+    double *resultWindow = (double *)malloc(sizeof(double) * diffSubandFrame);
     
-    vDSP_hamm_window(hannWindow, numSamplesPerFrame, 0);
+    vDSP_hamm_windowD(hannWindow, numSamplesPerFrame, 0);
     
     NSMutableArray *peakValues = [[NSMutableArray alloc] init];
     
@@ -262,12 +135,12 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
         for(; j < numSamplesPerFrame; j++) {
             tempSamples[j] = packets[i + j] * hannWindow[j];
         }
-        vDSP_conv(tempSamples,1, subFrameSamples,1,resultWindow, 1, diffSubandFrame, numSamplesPerSubFrame);
+        vDSP_convD(tempSamples,1, subFrameSamples,1,resultWindow, 1, diffSubandFrame, numSamplesPerSubFrame);
         [peakValues addObject:[NSNumber numberWithInt:[self findPitchPeakFreq:resultWindow NumFrames:diffSubandFrame]]];
     }
 }
 
--(int) findPitchPeakFreq:(float*)result NumFrames:(int) numFrames {
+-(int) findPitchPeakFreq:(double*)result NumFrames:(int) numFrames {
     int peakArray[2] = {-1,-1};
     int i = 0;
     bool goingUp = true;
@@ -310,70 +183,21 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     }
 }
 
-
-- (void)performVoiceAnalysisOn:(double *)frames
-{
-    const int p = 2048;
-    const int lenResult = 2 * p - 1;
-    double *resultsArray = new double[lenResult];
-
-    vDSP_convD(frames, 1, frames, 1, resultsArray, 1, lenResult, p); // Auto Correlation
-    NSLog(@"Autocorrelation:\n");
-    for (int i = 0; i < lenResult; i++) {
-        NSLog(@"%d = %.3f", i, resultsArray[i]);
-    }
-    
-    // For graphing values
-    NSMutableArray *xValues = [[NSMutableArray alloc] init];
-    NSMutableArray *yValues = [[NSMutableArray alloc] init];
-    for (int i = 0; i < p; i++) {
-        xValues[i] = [NSNumber numberWithInt:i];
-        yValues[i] = [NSNumber numberWithDouble:resultsArray[i]];
-    }
-    GSGraph *graph = [[GSGraph alloc] initWithXValues:xValues YValues:yValues withContext:UIGraphicsGetCurrentContext()];
-    [graph drawAxisLines];
-    [graph plotXAndYValues];
-    
-    
-//    long int N = p, NRHS = p, LDA = p, LDB = p, INFO;
-//    long int IPIV[p];
-    // N -> Number of linear equations, i.e. number of rows for a square matrix A
-    // NRHS -> Number of right-hand sides, i.e. number of columns for a matrix B
-    // A -> Coefficient matrix A
-    // LDA -> Dimension of array A, LDA >= max(1, N)
-    // IPIV -> Integer array with dimension N. Pivot indices that define the permutation matrix P.
-    // B -> The array B with dimension LDB, NRHS
-    // LDB -> Leading dimension of array B, LDB >= max(1, N)
-    // INFO -> Status
-    //          = 0:  successful exit
-    //          < 0:  if INFO = -i, the i-th argument had an illegal value
-    //          > 0:  if INFO = i, U(i,i) is exactly zero.  The factorization
-    //                has been completed, but the factor U is exactly
-    //                singular, so the solution could not be computed.
-//    dgesv_(&N, &NRHS, coeffArray, &LDA, IPIV, corrResults, &LDB, &INFO);
-    
-//    NSLog(@"Status: %ld", INFO);
-    
-//    NSLog(@"After:\n");
-//    for (int a = 0; a < p; a++) {
-//        NSLog(@"%.3f ", corrResults[a]);
-//    }
-}
--(void) FindLinearPredictionCoeffwithFrameArray:(float*) frame ResultArray:(float*) result Order:(int) p FrameLength:(int) frameLength{
+-(void) FindLinearPredictionCoeffwithFrameArray:(double*) frame ResultArray:(double*) result Order:(int) p FrameLength:(int) frameLength{
     int col = 0;
-    float* corMatrix = (float*) malloc(sizeof(float) * p * p);
+    double* corMatrix = (double*) malloc(sizeof(double) * p * p);
     
     // creates solution array [r(1) .... r(p)]
-    //float* solutionArr = (float*) malloc(sizeof(float) * p);
-    vDSP_conv(frame + 1, 1, frame, 1,  result, 1, p, frameLength);
+    //double* solutionArr = (double*) malloc(sizeof(double) * p);
+    vDSP_convD(frame + 1, 1, frame, 1,  result, 1, p, frameLength);
     for(int row =0; row < p; row++) {
-        vDSP_conv(frame, 1, frame, 1, (corMatrix + row * p + col) , 1, p - col, frameLength);
+        vDSP_convD(frame, 1, frame, 1, (corMatrix + row * p + col) , 1, p - col, frameLength);
             for(int temp = 1; temp < p - col; temp++) {
                 corMatrix[row + col * p + temp * p] = corMatrix[row *p + col + temp];
             }
         col++;
         for(int i = 0; i < p; i++) {
-            printf("%f ", corMatrix[row * p + i]);
+//            printf("%f ", corMatrix[row * p + i]);
         }
         printf("\n");
     }
@@ -384,30 +208,32 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     long int nrhs = 1;
     long int LDA = dim;
     long int LDB = dim;
-    long int info;
+    long int info = 0;
     long int ipiv[p * p -1];
-    sgetrf_(&dim, &dim, corMatrix, &LDA, ipiv, &info);
-    sgetrs_(&trans, &dim, &nrhs, corMatrix, &LDA, ipiv, result, &LDB, &info);
+    dgetrf_(&dim, &dim, corMatrix, &LDA, ipiv, &info);
+    dgetrs_(&trans, &dim, &nrhs, corMatrix, &LDA, ipiv, result, &LDB, &info);
     for(int i = 0; i < p; i++){
         printf("%f ", result[i]);
     }
     printf("\n");
 }
 
--(float*) crreatZeroBufferedwindowNonZeroLength:(int) nonZerloLengh ZeroLeng:(int)zeroPadding Data:(float*) data{
-    float * buff = (float*) calloc(0, sizeof(float) * (nonZerloLengh + zeroPadding));
-    memcpy(buff, data, sizeof(float) * nonZerloLengh);
+-(double*) crreatZeroBufferedwindowNonZeroLength:(int) nonZerloLengh ZeroLeng:(int)zeroPadding Data:(double *) data{
+    double * buff = (double*) calloc(0, sizeof(double) * (nonZerloLengh + zeroPadding));
+    memcpy(buff, data, sizeof(double) * nonZerloLengh);
 //    for(int i = nonZerloLengh + 1; i < nonZerloLengh + zeroPadding; i++)
 //        buff[i] = 0.0f;
     return buff;
 }
 
--(void) inverseFilter:(float*) data Result:(float*)result FilterCoefficients:(float*)filter
+-(void) inverseFilter:(double*) data Result:(double*)result FilterCoefficients:(double*)filter
         ArrayLength:(int) al FilterLength:(int)fl {
-            for(int i=0; i<al;i++)
-                for(int j=1; j<=fl;j++) {
-                    result[i]+= filter[j -1] * powf(data[i], -1.0 * j);
-                }
+    for(int i=0; i<al;i++) {
+        result[i] = 1.0;
+        for(int j=1; j<=fl;j++) {
+            result[i]+= filter[j -1] * powf(data[i], -1.0 * j);
+        }
+    }
 }
 
 -(void) preformFFTForward:(double**)data Length:(int*) length {
@@ -415,7 +241,7 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     if(log2N != *length) {
         double* tempStorage = (double*) calloc(0, sizeof(double) * log2N);
         memcpy(tempStorage, data, sizeof(double) * (*length));
-       free(*data);
+        free(*data);
         *data = tempStorage;
         *length = log2N;
     }
@@ -437,8 +263,10 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     // Computes an in-place single-precision real discrete Fourier transform,
     // from the time domain to the frequency domain (forward).
     vDSP_fft_zripD(tempSetup, tempSplitComplex, 1, log2N, kFFTDirection_Forward);
+     
     // Unpack the result into a real vector
     vDSP_ztocD(tempSplitComplex, 1, (DSPDoubleComplex *)data, 2, log2N);
+    
     free(tempSplitComplex->realp);
     free(tempSplitComplex->imagp);
 }
@@ -446,11 +274,6 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
 -(void) preformFFTInverse:(double**)data Length:(int*) length {
     unsigned long log2N = ceil(log2(*length));
     if(log2N != *length) {
-//        double* tempStorage = (double*) calloc(0, sizeof(double) * log2N);
-//        memcpy(tempStorage, data, sizeof(double) * (*length));
-//        free(*data);
-//        *data = tempStorage;
-//        *length = log2N;
         printf("ERROR input data is not power of 2");
     }
     int pow2length = (int) pow(2, log2N);
@@ -471,6 +294,10 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     // Computes an in-place single-precision real discrete Fourier transform,
     // from the time domain to the frequency domain (forward).
     vDSP_fft_zripD(tempSetup, tempSplitComplex, 1, log2N, kFFTDirection_Inverse);
+    
+    // Unpack the result into a real vector
+    vDSP_ztocD(tempSplitComplex, 1, (DSPDoubleComplex *)data, 2, log2N);
+    
     free(tempSplitComplex->realp);
     free(tempSplitComplex->imagp);
 }
@@ -487,35 +314,88 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     }
 }
 
-
-//-(int)InvertMatrixWithLength:(int) n Matrix:(double*) matrix {
-//    int error=0;
-//    int *pivot = (int*) malloc(n*n*sizeof(int));
-//    double *workspace = (double*) malloc(n*sizeof(double));
-//    int N = 10;
-//    double* matrix1;
-//    /*  LU factorisation */
-//    dgetrf_(&N, &N, matrix1, &N, pivot, &error);
-//    
-//    if (error != 0) {
-//        NSLog(@"Error 1");
-//        free(pivot);
-//        free(workspace);
-//        return error;
+//- (void)performFFTOnRangeStartingAt:(int)sp EndingAt:(int)ep
+//{
+//    _mLog2N = ceil(log2(ep - sp));
+//    _mNumberOfPackets = (int) pow(2, _mLog2N);
+//    _mFFTLength = _mNumberOfPackets / 2;
+//
+//    // We need complex buffers for real and imaginary parts. These buffers efficiently store values
+//    // by getting rid of redundant values in real and imaginary parts of complex numbers.
+//    _mSplitComplex.realp = (double *) calloc(_mFFTLength, sizeof(double));
+//    _mSplitComplex.imagp = (double *) calloc(_mFFTLength, sizeof(double));
+//
+//    // Transforms the real array input = {A[0],..., A[n]} into an even-odd
+//    // array splitComplex = {A[0], A[2],..., A[n-1], A[1], A[3],..., A[n]}.
+//    // splitComplex stores the imaginary and real parts in separate arrays
+//    vDSP_ctozD((DSPDoubleComplex *)_mAudioBuffer, 2, &_mSplitComplex, 1, _mFFTLength);
+//
+//    // Computes an in-place single-precision real discrete Fourier transform,
+//    // from the time domain to the frequency domain (forward).
+//    vDSP_fft_zripD(self.fftSetup, &_mSplitComplex, 1, _mLog2N, kFFTDirection_Forward);
+//
+//    [self plotRange:ep - sp forPackets:_mAudioBuffer];
+//
+//    double scale = 1.0 / (2 * _mNumberOfPackets);
+//    vDSP_vsmulD(_mSplitComplex.realp, 1, &scale, _mSplitComplex.realp, 1, _mFFTLength);
+//    vDSP_vsmulD(_mSplitComplex.imagp, 1, &scale, _mSplitComplex.imagp, 1, _mFFTLength);
+//
+//    _mSplitComplex.realp[0] = 0; // zeroing out the DC value
+//    _mSplitComplex.imagp[0] = 0; // zeroing out the Nyquist value
+//
+//    double tmpData[_mFFTLength];
+//    double mAdjust0BD = 1.5849e-13;
+//    double one = 1.0;
+//
+//    // Convert from complex/rectangular (real & imaginary) coordinates
+//    // to polar (magnitude & phase) coordinates
+//    vDSP_zvmagsD(&_mSplitComplex, 1, tmpData, 1, _mFFTLength);
+//    vDSP_vsaddD(tmpData, 1, &mAdjust0BD, tmpData, 1, _mFFTLength);
+//    vDSP_vdbconD(tmpData, 1, &one, tmpData, 1, _mFFTLength, 0);
+//
+//    for (int i = 0; i < _mFFTLength; i++) {
+//        if (tmpData[i] < 0.0) {
+//            tmpData[i] = 0;
+//        }
 //    }
-//    
-//    /*  matrix inversion */
-//    dgetri_(&n, matrix, &n, pivot, workspace, &n, &error);
-//    
-//    if (error != 0) {
-//        NSLog(@"Error 2");
-//        free(pivot);
-//        free(workspace);
-//        return error;
-//    }
-//    
-//    free(pivot);
-//    free(workspace);
-//    return error;
+//
+////    [self plotRange:_mFFTLength forPackets:tmpData];
+//
+//    DSPDoubleComplex *complex = new DSPDoubleComplex[_mFFTLength];
+//
+//    // For polar coordinates
+//    double *mag = new double[_mFFTLength];
+//    double *phase = new double[_mFFTLength];
+//
+//    // Get complex vector absolute values
+//    vDSP_zvabsD(&_mSplitComplex, 1, mag, 1, _mFFTLength);
+//    // Get complex vector phase
+//    vDSP_zvphasD(&_mSplitComplex, 1, phase, 1, _mFFTLength);
+//
+//    _mSplitComplex.realp = mag;
+//    _mSplitComplex.imagp = phase;
+//
+//    // Convert from polar coords back to rectangular coords
+//    vDSP_ztocD(&_mSplitComplex, 1, complex, 2, _mFFTLength);
+//    vDSP_rectD((double *)complex, 2, (double *)complex, 2, _mFFTLength); // Polar to rectangular conversion
+//    vDSP_ctozD(complex, 2, &_mSplitComplex, 1, _mFFTLength);
+//
+//    // Computes an in-place single-precision real discrete Fourier transform,
+//    // from the frequency domain to the time domain (inverse).
+//    vDSP_fft_zripD(_fftSetup, &_mSplitComplex, 1, _mLog2N, kFFTDirection_Inverse);
+//
+//    // Unpack the result into a real vector
+//    vDSP_ztocD(&_mSplitComplex, 1, (DSPDoubleComplex *)_mAudioBuffer, 2, _mLog2N);
+//
+//    // Compensate for scaling for both FFTs. See Apple's vDSP documentation
+//    // to see how much scaling is required.
+//    // NOTE: Apple scales values to increase the efficiency of their functions.
+//    // As such, we have to scale them back.
+//    vDSP_vsmulD(_mAudioBuffer, 1, &scale, _mAudioBuffer, 1, _mLog2N);
+//
+////    [self plotRange:ep - sp forPackets:_mAudioBuffer];
+//    free(_mSplitComplex.realp);
+//    free(_mSplitComplex.imagp);
 //}
+
 @end

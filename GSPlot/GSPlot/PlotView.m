@@ -30,7 +30,7 @@
     
     FFTManager *fftManager = [[FFTManager alloc] initWithPackets:packets PacketCount:audioFile.packetCount];
 //    [fftManager performFFTOnRangeStartingAt:(int) 44100.0 * 0.8 EndingAt:(int) 44100.0 * 1.1];
-    [fftManager performFFTOnRangeStartingAt:0 EndingAt:fftManager.mNumberOfPackets];
+//    [fftManager performFFTOnRangeStartingAt:0 EndingAt:fftManager.mNumberOfPackets];
 }
 
 @end
