@@ -17,7 +17,6 @@
 @property (nonatomic) int mFFTLength;
 @property (nonatomic) double *mAudioBuffer;
 @property (nonatomic) DSPDoubleSplitComplex mSplitComplex;
-
 - (id)initWithPackets:(SInt16 *)packets PacketCount:(int)packetCount;
 
 @end

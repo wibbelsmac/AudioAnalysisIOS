@@ -9,6 +9,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <cmath>
+#include <vector>
+#include <stdlib.h>
 #include "FFTManager.h"
 #include "AAAButterLow.h"
 #include <vector>
@@ -28,7 +30,11 @@
 -(void) performFFTForward:(double**)data Length:(int*) length;
 -(void) performFFTInverse:(double**)data Length:(int*) length;
 -(void) performHilbertPhaseShifts:(double*)packedData Length:(int)length;
-
+-(void)CalculateVOP: (double*) data PacketCount:(int) pCount;
+-(void) hilberEnvelope: (double*) array0 Transform: (double*) array1 Length:(int) length;
+-(void) convolveData: (double*) data DataLength:(int) dLength Filter:(double*) filter FilterLength:(int)
+fLength Result:(double*) result ResultLength:(int) resultLength;
+void ForwardLinearPrediction( std::vector<double> &coeffs, const std::vector<double> &x );
 @end
 
 @implementation FFTManager
@@ -49,44 +55,96 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
         _mFFTLength = _mNumberOfPackets / 2;
         NSLog(@"n = %d", _mNumberOfPackets);
         
-        // An opaque type that contains setup information for a given double-precision FFT transform.
-//        _fftSetup = vDSP_create_fftsetupD(_mLog2N, kFFTRadix2);
+// An opaque type that contains setup information for a given double-precision FFT transform.
+        _fftSetup = vDSP_create_fftsetupD(_mLog2N, kFFTRadix2);
         
         // Initialize the input buffer with packets from the audio file
         _mAudioBuffer = (double *) calloc(_mNumberOfPackets, sizeof(double));
         for (int k = 0; k < _mNumberOfPackets; k++) {
-            _mAudioBuffer[k] = (double) packets[k];
+            _mAudioBuffer[k] = (double) (packets[k]);
         }
-        free(packets);
+        [self CalculateVOP:_mAudioBuffer PacketCount:_mNumberOfPackets];
         
-        // calculating linear prediction coefficients
-        double* window = [self crreatZeroBufferedwindowNonZeroLength:numSamplesPerFrame ZeroLeng:10 Data:_mAudioBuffer];
-        double * lpc_coef = (double*) malloc(sizeof(double) * 10);
-        [self FindLinearPredictionCoeffwithFrameArray:window ResultArray:lpc_coef Order:10 FrameLength:numSamplesPerFrame];
-        
-        int resultSize = 1024;
-        double * result = (double *) malloc(resultSize * sizeof(double));
-        [self inverseFilter:window Result:(double*)result FilterCoefficients:(double*)lpc_coef
-                ArrayLength:(int)resultSize FilterLength:(int)10];
-        
-        [self performFFTForward:&result Length:&resultSize];
-        for (int i = 0; i < resultSize; i++) {
-            printf("Index %d = %.2f\n", i, result[i]);
-        }
-        
-        [self performHilbertPhaseShifts:result Length:resultSize];
-        [self performFFTInverse:&result Length:&resultSize];
-        
-        [self plotAllValuesStartingPacket:0 EndWithPacket:resultSize forPackets:result];
+        //    double * filteredData = (double*) calloc(pCount, sizeof(double));
+        //    AAAButterLow *blow = [[AAAButterLow alloc] initWithSampleFreq:sampleFreq CutoffFreq:2500];
+        //    [blow filterArray:data DataLength:pCount ResultArray:filteredData ResultLength:pCount];
+        //    data = filteredData;
     }
+    free(packets);
     return self;
 }
+- (void)CalculateVOP: (double*) data PacketCount:(int) pCount
+{
+    double hWindow_time = .02;
+    double overlap_scale = .5;
+    int hWindowLength =  hWindow_time * sampleFreq;  // hamming window length
+    // calculating linear prediction coefficients
+    int totalwindowSize = pow(2, ceil(log2(hWindowLength)));
+    int LPCorder = 10;
 
+    int numoverlapWindows = ((pCount - hWindowLength) / hWindowLength) /overlap_scale;
+    int totalSampleProcessed = numoverlapWindows * hWindowLength / 2;
+    
+    double * window = (double*) calloc(totalwindowSize, sizeof(double));
+    double * LP_Residual = (double *) calloc(totalwindowSize, sizeof(double));
+    double * HilTrans_LP_Residual = (double *) calloc(totalwindowSize, sizeof(double));
+    double * lpc_coef = (double*) malloc(sizeof(double) * LPCorder);
+    double * resultData = (double*) calloc(pCount, sizeof(double));
+    double * conv_resultData = (double*) calloc(pCount, sizeof(double));
+
+    for(int i = 0; i < numoverlapWindows; i ++) {
+        // copy data over into temp window
+        int window_start = i * hWindowLength / 2;
+        memcpy(window, (data + window_start),hWindowLength * sizeof(double));
+        std::vector<double> coeffs (LPCorder, 0.0);
+        std::vector<double> dataVector (window, window + hWindowLength);
+
+        //  1.  calculate the LP Coefficients
+        ForwardLinearPrediction(coeffs, dataVector);
+//        [self FindLinearPredictionCoeffwithFrameArray:window ResultArray:lpc_coef Order:LPCorder FrameLength: hWindowLength];
+        memcpy(lpc_coef, &(coeffs[0]),LPCorder * sizeof(double));
+        
+        //  2.  calculate the LP Residual
+        [self inverseFilter:window Result:LP_Residual FilterCoefficients:lpc_coef // construct LPC residual
+                ArrayLength:hWindowLength FilterLength:LPCorder];
+        //  3. copy data over and perform hilbert transform
+        memcpy(HilTrans_LP_Residual, LP_Residual, totalwindowSize * sizeof(double)); // copy lpc residual for Hilbert Trans of LPC Resid
+        [self applyHanningWindowTo:window StartingAt:0 EndingAt:hWindowLength];
+        [self performFFTForward:&HilTrans_LP_Residual Length:&totalwindowSize]; // forward fft
+        [self performHilbertPhaseShifts:HilTrans_LP_Residual Length:totalwindowSize]; // hilbert transform phase shifts
+        [self performFFTInverse:&HilTrans_LP_Residual Length:&totalwindowSize]; // complete hilbert trans
+        [self hilberEnvelope:LP_Residual Transform:HilTrans_LP_Residual Length:hWindowLength]; // envelope both values toghether
+        
+        for(int z = 0; z < hWindowLength; z++) {  // copy over data to result
+            if(z > hWindowLength / 2) {
+               resultData[window_start + z] +=  HilTrans_LP_Residual[z];  // scale to .5 for overlap
+            } else {
+                resultData[window_start + z] = HilTrans_LP_Residual[z];
+            }
+        }
+    }
+      // 50ms hanning window to smooth data after
+    int convWindowLength = .05 * sampleFreq;
+    double* hWindow = (double*) calloc(convWindowLength, sizeof(double)); // construct hamming window
+    vDSP_hamm_windowD(hWindow, convWindowLength, 0);
+//    [self convolveData:resultData DataLength:totalSampleProcessed Filter:hWindow FilterLength:convWindowLength
+//          Result:conv_resultData  ResultLength:(totalSampleProcessed - hWindowLength)];
+    
+    [self scaleData:data Length:pCount Max:1.0 Min:-1.0];
+    [self scaleData:resultData Length:pCount Max:1.0 Min:-1.0];
+    [self scaleData:conv_resultData Length:pCount Max:1.0 Min:-1.0];
+    for(int j = 0; j < (totalSampleProcessed); j++) {
+        printf("%d\t%f\t%f\n", j, resultData[j], data[j]);
+    }
+    
+    [self plotAllValuesStartingPacket:0 EndWithPacket:6000 forPackets:resultData];
+
+}
 - (void)applyHanningWindowTo:(double *)values StartingAt:(int)sv EndingAt:(int)ev
 {
     int range = ev - sv;
     double *window = new double[range];
-    vDSP_hann_windowD(window, self.mNumberOfPackets, vDSP_HANN_NORM);
+    vDSP_hann_windowD(window, range, vDSP_HANN_NORM);
     
     for (int i = 0, index = sv; index < ev; i++, index++) {
         values[index] *= window[i];
@@ -200,10 +258,8 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
 
 -(void) FindLinearPredictionCoeffwithFrameArray:(double*) frame ResultArray:(double*) result Order:(int) p FrameLength:(int) frameLength{
     int col = 0;
-    double* corMatrix = (double*) malloc(sizeof(double) * p * p);
-    
-    // creates solution array [r(1) .... r(p)]
-    //double* solutionArr = (double*) malloc(sizeof(double) * p);
+    double* corMatrix = (double*) calloc(p * p, sizeof(double));
+    memset(result, 0,p * sizeof(double));
     vDSP_convD(frame + 1, 1, frame, 1,  result, 1, p, frameLength);
     for(int i = 0; i < p; i++){
         result[i] = -1 * result[i];
@@ -214,13 +270,8 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
                 corMatrix[row + col * p + temp * p] = corMatrix[row *p + col + temp];
             }
         col++;
-        for(int i = 0; i < p; i++) {
-            printf("%f ", corMatrix[row * p + i]);
-        }
-        printf("\n");
     }
     // solve the system of equations for the linear prediction coefficients
-    printf("\n");
     char trans = 'N';
     long int dim = p;
     long int nrhs = 1;
@@ -230,33 +281,26 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     long int ipiv[p * p -1];
     dgetrf_(&dim, &dim, corMatrix, &LDA, ipiv, &info);
     dgetrs_(&trans, &dim, &nrhs, corMatrix, &LDA, ipiv, result, &LDB, &info);
-    for(int i = 0; i < p; i++){
-        printf("%f ", result[i]);
-    }
-    printf("\n");
 }
 
 -(double*) crreatZeroBufferedwindowNonZeroLength:(int) nonZerloLengh ZeroLeng:(int)zeroPadding Data:(double *) data{
     double * buff = (double*) calloc(nonZerloLengh + zeroPadding, sizeof(double));
     memcpy(buff, data, sizeof(double) * nonZerloLengh);
-//    for(int i = nonZerloLengh + 1; i < nonZerloLengh + zeroPadding; i++)
-//        buff[i] = 0.0f;
     return buff;
 }
-
+// performs inverse filter result length must equal arraylength
+// modeled after this page http://iitg.vlab.co.in/?sub=59&brch=164&sim=616&cnt=1109
 -(void) inverseFilter:(double*) data Result:(double*)result FilterCoefficients:(double*)filter
         ArrayLength:(int) al FilterLength:(int)fl {
-    for(int i=0; i<al;i++) {
-        result[i] = 1.0;
-        for(int j=1; j<=fl;j++) {
-            if (data[i] == 0.0) {
-                result[i] = 1.0;
-            } else {
-                result[i]+= filter[j -1] * pow(data[i], -1.0 * j);
-            }
-//            printf("result[i] = %.2f, filter[j-1] = %.2f, data[i] = %.2f, pow(data[i], -1.0 * j) = %.2f\n", result[i], filter[j-1], data[i], pow(data[i], -1.0 * j));
-        }
-    }
+    int inverseFilterLength = fl + 1;
+    static double * temp = (double*) calloc(inverseFilterLength, sizeof(double));
+    temp[0] = 1;
+    memccpy(temp + 1, filter, fl, sizeof(double));
+    // copy the last filter length of values 
+    //memccpy(result + (al - inverseFilterLength), data + (al - inverseFilterLength), inverseFilterLength, sizeof(double));
+    // the data vector must be atlest resultLength + filterLength
+    [self convolveData:data DataLength:al Filter:filter FilterLength:inverseFilterLength Result:result ResultLength:(al)];
+    
 }
 
 -(void) performFFTForward:(double**)data Length:(int*) length {
@@ -269,8 +313,8 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
         *data = tempStorage;
         *length = pow2length;
     }
-    int pow2lengthOver2 = pow2length / 2;
-    FFTSetupD tempSetup = vDSP_create_fftsetupD(log2N, kFFTRadix2);
+//    [self applyHanningWindowTo:*data StartingAt:0 EndingAt:length -1];
+    int pow2lengthOver2 = pow2length / 2;;
     
     // We need complex buffers for real and imaginary parts. These buffers efficiently store values
     // by getting rid of redundant values in real and imaginary parts of complex numbers.
@@ -285,10 +329,10 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     
     // Computes an in-place single-precision real discrete Fourier transform,
     // from the time domain to the frequency domain (forward).
-    vDSP_fft_zripD(tempSetup, &tempSplitComplex, 1, log2N, kFFTDirection_Forward);
-     
+    vDSP_fft_zripD(_fftSetup, &tempSplitComplex, 1, log2N, kFFTDirection_Forward);
+    
     // Unpack the result into a real vector
-    vDSP_ztocD(&tempSplitComplex, 1, (DSPDoubleComplex *)*data, 2, log2N);
+    vDSP_ztocD(&tempSplitComplex, 1, (DSPDoubleComplex *)*data, 2, pow2lengthOver2);
     
     free(tempSplitComplex.realp);
     free(tempSplitComplex.imagp);
@@ -305,7 +349,6 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
         *length = pow2length;
     }
     int pow2lengthOver2 = pow2length / 2;
-    FFTSetupD tempSetup = vDSP_create_fftsetupD(log2N, kFFTRadix2);
     
     // We need complex buffers for real and imaginary parts. These buffers efficiently store values
     // by getting rid of redundant values in real and imaginary parts of complex numbers.
@@ -320,10 +363,12 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     
     // Computes an in-place single-precision real discrete Fourier transform,
     // from the time domain to the frequency domain (forward).
-    vDSP_fft_zripD(tempSetup, &tempSplitComplex, 1, log2N, kFFTDirection_Inverse);
+    vDSP_fft_zripD(_fftSetup, &tempSplitComplex, 1, log2N, kFFTDirection_Inverse);
     
     // Unpack the result into a real vector
-    vDSP_ztocD(&tempSplitComplex, 1, (DSPDoubleComplex *)*data, 2, log2N);
+    vDSP_ztocD(&tempSplitComplex, 1, (DSPDoubleComplex *)*data, 2, pow2lengthOver2);
+    double scale = (1.0 / (((double) *length) * 2));
+    vDSP_vsmulD(*data, 1, &scale, *data, 1, *length); // account for 1/N scaling factor
     
     free(tempSplitComplex.realp);
     free(tempSplitComplex.imagp);
@@ -336,8 +381,39 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     double temp;
     for(int i = 2; i<length - 1; i+=2) {
         temp = packedData[i];
-        packedData[i] = packedData[i+1];
+        packedData[i] = -1.0 * packedData[i+1];
         packedData[i+1] = packedData[i];
+    }
+}
+
+// convolves data vector with window the length of data vector must be at least lResult + lFilter - 1.
+-(void) convolveData: (double*) data DataLength:(int) dLength Filter:(double*) filter FilterLength:(int)
+        fLength Result:(double*) result ResultLength:(int) resultLength {
+    // start at end of filter to perform convolution
+    vDSP_convD(data, 1, filter + fLength -1, -1, result,  1, resultLength,fLength);
+}
+
+// stores result of hiblert envelop in array1
+- (void) hilberEnvelope: (double*) array0 Transform: (double*) array1 Length:(int) length {
+    for(int i = 0; i < length; i ++) {
+        double arr0sqrd = pow(array0[i], 2.0);
+        double arr1sqrd = pow(array1[i], 2.0);
+        array1[i] = sqrt(arr0sqrd + arr1sqrd);
+    }
+}
+
+- (void) scaleData: (double*) data Length:(int) length Max:(double) max Min:(double) min {
+    double dMax, dMin;
+    dMax = dMin = data[0];
+    for(int i = 1; i < length; i ++) {
+        if(data[i] > dMax) {
+            dMax = data[i];
+        } else if(data[i] < dMin) {
+            dMin = data[i];
+        }
+    }
+    for(int i = 0; i < length; i ++) {
+        data[i] = (((max - min) * (data[i] - dMin)) / (dMax - dMin)) + min;
     }
 }
 
@@ -425,4 +501,46 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
 //    free(_mSplitComplex.imagp);
 //}
 
+void ForwardLinearPrediction( std::vector<double> &coeffs, const std::vector<double> &x )
+{
+    // GET SIZE FROM INPUT VECTORS
+    size_t N = x.size() - 1;
+    size_t m = coeffs.size();
+    // INITIALIZE R WITH AUTOCORRELATION COEFFICIENTS
+    std::vector<double> R( m + 1, 0.0 );
+    for ( size_t i = 0; i <= m; i++ )
+    {
+        for ( size_t j = 0; j <= N - i; j++ )
+        {
+            R[ i ] += x[ j ] * x[ j + i ];
+        }
+    }
+    // INITIALIZE Ak
+    std::vector<double> Ak( m + 1, 0.0 );
+    Ak[ 0 ] = 1.0;
+    // INITIALIZE Ek
+    double Ek = R[ 0 ];
+    // LEVINSON-DURBIN RECURSION
+    for ( size_t k = 0; k < m; k++ )
+    {
+        // COMPUTE LAMBDA
+        double lambda = 0.0;
+        for ( size_t j = 0; j <= k; j++ ) 
+        { 
+            lambda -= Ak[ j ] * R[ k + 1 - j ];
+        } 
+        lambda /= Ek;
+        // UPDATE Ak
+        for ( size_t n = 0; n <= ( k + 1 ) / 2; n++ )
+        {
+            double temp = Ak[ k + 1 - n ] + lambda * Ak[ n ];
+            Ak[ n ] = Ak[ n ] + lambda * Ak[ k + 1 - n ];
+            Ak[ k + 1 - n ] = temp;
+        }
+        // UPDATE Ek
+        Ek *= 1.0 - lambda * lambda;
+    } 
+    // ASSIGN COEFFICIENTS 
+    coeffs.assign( ++Ak.begin(), Ak.end() ); 
+}
 @end

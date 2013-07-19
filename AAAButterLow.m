@@ -20,7 +20,7 @@
 @synthesize b2;
 @synthesize c;
 
--(id)initWithSampleFreq:(float)sampleFreq_ CutoffFreq:(float)cuttofff {
+-(id)initWithSampleFreq:(double)sampleFreq_ CutoffFreq:(double)cuttofff {
     // setting up the sample coefficients from following example:
     // http://www.kwon3d.com/theory/filtering/fil.html
     
@@ -41,8 +41,8 @@
     return self;
 }
 
--(void) filterArray: (float*)dataArray DataLength:(int)dataLength ResultArray:(float*)resultArray ResultLength:(int)resultLength {
-    float *coefficients = (float *) malloc(sizeof(float) * 5);
+-(void) filterArray: (double*)dataArray DataLength:(int)dataLength ResultArray:(double*)resultArray ResultLength:(int)resultLength {
+    double *coefficients = (double *) malloc(sizeof(double) * 5);
     
     coefficients[0] = a0;
     coefficients[1] = a1;
@@ -54,6 +54,6 @@
     resultArray[0] = dataArray [0];
     resultArray[1] = dataArray [1];
     
-    vDSP_deq22(dataArray, 1, coefficients, resultArray, 1, (resultLength - 2));
+    vDSP_deq22D(dataArray, 1, coefficients, resultArray, 1, (resultLength - 2));
 }
 @end
