@@ -27,6 +27,7 @@
 		2456F594178B482F0017BEE7 /* AAAButterLow.m in Sources */ = {isa = PBXBuildFile; fileRef = 2456F593178B482F0017BEE7 /* AAAButterLow.m */; };
 		2456F596178B699D0017BEE7 /* CoreAudio.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2456F595178B699D0017BEE7 /* CoreAudio.framework */; };
 		2456F598178B744F0017BEE7 /* 50Hz_-3dBFS_6s.wav in Resources */ = {isa = PBXBuildFile; fileRef = 2456F597178B744F0017BEE7 /* 50Hz_-3dBFS_6s.wav */; };
+		2458C38017A72A99001123AA /* LinearPredictionAnalysis.mm in Sources */ = {isa = PBXBuildFile; fileRef = 2458C37F17A72A99001123AA /* LinearPredictionAnalysis.mm */; };
 		AE49AC94178A6FC400464040 /* GSAxisLine.m in Sources */ = {isa = PBXBuildFile; fileRef = AE49AC8D178A6FC400464040 /* GSAxisLine.m */; };
 		AE49AC95178A6FC400464040 /* GSGraph.m in Sources */ = {isa = PBXBuildFile; fileRef = AE49AC8F178A6FC400464040 /* GSGraph.m */; };
 		AE49AC96178A6FC400464040 /* GSLine.m in Sources */ = {isa = PBXBuildFile; fileRef = AE49AC91178A6FC400464040 /* GSLine.m */; };
@@ -62,6 +63,8 @@
 		2456F593178B482F0017BEE7 /* AAAButterLow.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = AAAButterLow.m; sourceTree = "<group>"; };
 		2456F595178B699D0017BEE7 /* CoreAudio.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreAudio.framework; path = System/Library/Frameworks/CoreAudio.framework; sourceTree = SDKROOT; };
 		2456F597178B744F0017BEE7 /* 50Hz_-3dBFS_6s.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "50Hz_-3dBFS_6s.wav"; sourceTree = "<group>"; };
+		2458C37E17A72A99001123AA /* LinearPredictionAnalysis.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = LinearPredictionAnalysis.h; path = ../LinearPredictionAnalysis.h; sourceTree = "<group>"; };
+		2458C37F17A72A99001123AA /* LinearPredictionAnalysis.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = LinearPredictionAnalysis.mm; path = ../LinearPredictionAnalysis.mm; sourceTree = "<group>"; };
 		AE49AC8C178A6FC400464040 /* GSAxisLine.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = GSAxisLine.h; path = GSPlot/GSPlot/GSAxisLine.h; sourceTree = "<group>"; };
 		AE49AC8D178A6FC400464040 /* GSAxisLine.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = GSAxisLine.m; path = GSPlot/GSPlot/GSAxisLine.m; sourceTree = "<group>"; };
 		AE49AC8E178A6FC400464040 /* GSGraph.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = GSGraph.h; path = GSPlot/GSPlot/GSGraph.h; sourceTree = "<group>"; };
@@ -125,6 +128,8 @@
 		01B3CBD3177E27AC00A033A0 /* AudioAnalysisApp */ = {
 			isa = PBXGroup;
 			children = (
+				2458C37E17A72A99001123AA /* LinearPredictionAnalysis.h */,
+				2458C37F17A72A99001123AA /* LinearPredictionAnalysis.mm */,
 				01B3CBDC177E27AC00A033A0 /* AAAAppDelegate.h */,
 				01B3CBDD177E27AC00A033A0 /* AAAAppDelegate.m */,
 				01B3CBE5177E27AC00A033A0 /* AAAViewController.h */,
@@ -251,6 +256,7 @@
 				AE49AC96178A6FC400464040 /* GSLine.m in Sources */,
 				AE49AC97178A6FC400464040 /* PlotView.m in Sources */,
 				2456F594178B482F0017BEE7 /* AAAButterLow.m in Sources */,
+				2458C38017A72A99001123AA /* LinearPredictionAnalysis.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

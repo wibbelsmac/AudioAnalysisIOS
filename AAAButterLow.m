@@ -32,12 +32,12 @@
     self.b1 = 2.0f * (powf(omegaPrime, 2.0f) - 1)/ self.c;
     self.b2 =  (1.0f - 2.0f * cos(PI/ 4.0f) * omegaPrime + powf(omegaPrime, 2.0f)) / self.c;
     
-    printf("a0: %f\n", a0);
-    printf("a1: %f\n", a1);
-    printf("a2: %f\n", a2);
-    printf("b1: %f\n", b1);
-    printf("b2: %f\n", b2);
-    printf("total: %f\n", a0 + a1 + a2 - b1 - b2);
+//    printf("a0: %f\n", a0);
+//    printf("a1: %f\n", a1);
+//    printf("a2: %f\n", a2);
+//    printf("b1: %f\n", b1);
+//    printf("b2: %f\n", b2);
+//    printf("total: %f\n", a0 + a1 + a2 - b1 - b2);
     return self;
 }
 

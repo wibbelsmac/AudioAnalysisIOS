@@ -11,36 +11,37 @@
 #include <cmath>
 #include <vector>
 #include <stdlib.h>
-#include "FFTManager.h"
+#include "LinearPredictionAnalysis.h"
 #include "AAAButterLow.h"
-#include <vector>
 
 #import <Accelerate/Accelerate.h>
 #import "GSGraph.h"
 
 
 using namespace std;
-@interface FFTManager(Private)
+@interface LinearPredictionAnalysis(Private)
 
 #define CLAMP(x, low, high) (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
 #define localMin(a, dAta) (dAta[a -1] > dAta[a] && dAta[a + 1] > dAta[a])
 #define localMax(a, dAta) (dAta[a -1] < dAta[a] && dAta[a + 1] < dAta[a])
 #define mag(a) (sqrt(pow(a, 2.0)))
-
+#define numFormants 4
 typedef struct {
-    int minStartIndex;
+    int wordStartIndex;
+    int vowelStartIndex;
     int maxIndex;
-    int minEndIndex;
+    int wordEndIndex;
+    int vowelEndIndex;
     double totalSlope;
-} vowelSeg;
+} audioSegment;
 
 typedef struct {
-    int start;
-    int end;
-} vowelBoundaries;
+    double formant[numFormants];
+} formantData;
 
 - (void)plotRange:(int)range forPackets:(double *)packets;
 - (void)plotAllValuesStartingPacket:(int)sp EndWithPacket:(int)ep forPackets:(double *)packets;
+
 - (void)applyHanningWindowTo:(double *)values StartingAt:(int)sv EndingAt:(int)ev;
 -(void) FindLinearPredictionCoeffwithFrameArray:(double*) frame ResultArray:(double*) result Order:(int) p FrameLength:(int) frameLength;
 
@@ -52,20 +53,19 @@ typedef struct {
 -(void) hilberEnvelope: (double*) array0 Transform: (double*) array1 Length:(int) length;
 -(void) convolveData: (double*) data DataLength:(int) dLength Filter:(double*) filter FilterLength:(int)
 fLength Result:(double*) result ResultLength:(int) resultLength;
-- (vector<vowelBoundaries>) pickPeaksandValleys:(double*)data Length:(int) length PeakThreshold:(double) pThresh ValleyThreshold:(double) vThresh;
 -(double) SumOfSlopeAroundPoint:(int) index FodData:(double*) fodData FodLength:(int) length SecondsFrom:(double) secs;
 -(void) CalculateFormantsFromLPC:(double*)data Length:(int) length;
 @end
 
-@implementation FFTManager
+@implementation LinearPredictionAnalysis
 
-const int sampleFreq = 44100;
-const float sampleFrameTime = .02f;
-int numSamplesPerFrame = sampleFrameTime * sampleFreq;
-const float subFrameFract = .60f;
-const int numSamplesPerSubFrame = numSamplesPerFrame * subFrameFract;
-const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
-
+static const int sampleFreq = 44100;
+static const float sampleFrameTime = .02f;
+static int numSamplesPerFrame = sampleFrameTime * sampleFreq;
+static const float subFrameFract = .60f;
+static const int numSamplesPerSubFrame = numSamplesPerFrame * subFrameFract;
+static const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
+static const int LPCorder = 44;
 - (id)initWithPackets:(SInt16 *)packets PacketCount:(int)packetCount
 {
     self = [super init];
@@ -84,97 +84,156 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
         }
         
         double * filteredData = (double*) calloc(_mNumberOfPackets, sizeof(double));
-        AAAButterLow *blow = [[AAAButterLow alloc] initWithSampleFreq:sampleFreq CutoffFreq:5500];
+        AAAButterLow *blow = [[AAAButterLow alloc] initWithSampleFreq:sampleFreq CutoffFreq:8000];
         [blow filterArray:_mAudioBuffer DataLength:_mNumberOfPackets ResultArray:filteredData ResultLength:_mNumberOfPackets];
         _mAudioBuffer = filteredData;
         
         [self CalculateVOP:_mAudioBuffer PacketCount:_mNumberOfPackets];
         
-  
+        
     }
     free(packets);
     return self;
 }
+
 - (void)CalculateVOP: (double*) data PacketCount:(int) pCount
 {
     double hWindow_time = .02;
     double overlap_scale = .5;
     int windowLength =  hWindow_time * sampleFreq;
-
-    // calculating linear prediction coefficients
+    
     int totalwindowSize = pow(2, ceil(log2(windowLength)));
-    int LPCorder = 44;
 
+    
     int numoverlapWindows = ((pCount - windowLength) / windowLength) /overlap_scale;
     int totalSampleProcessed = numoverlapWindows * windowLength / 2;
-    
+    // teporary storage for meta data
     double * window = (double*) calloc(totalwindowSize, sizeof(double));
     double * LP_Residual = (double *) calloc(totalwindowSize, sizeof(double));
     double * HilTrans_LP_Residual = (double *) calloc(totalwindowSize, sizeof(double));
     double * lpc_coef = (double*) malloc(sizeof(double) * LPCorder);
+    // storage for result data
     double * resultData = (double*) calloc(pCount, sizeof(double));
     double * conv_resultData = (double*) calloc(pCount, sizeof(double));
-    double * pitchEst = (double*) calloc(pCount, sizeof(double));
     double * VOP_Evidience = (double*) calloc(pCount, sizeof(double));
     double* frameWindow = (double*) calloc(windowLength, sizeof(double)); // construct hamming window
     
     vDSP_hamm_windowD(frameWindow, windowLength, 0);
-    bool calculateFormants = false;
     [self scaleData:data Length:pCount Max:1.0 Min:-1.0];
-    
     for(int i = 0; i < numoverlapWindows; i ++) {
         
         // copy data over into temp window
         int window_start = i * windowLength / 2;
-//        vDSP_vmulD(frameWindow, 1, (data + window_start), 1, window, 1, windowLength);
-        memcpy(window, (data + window_start), windowLength * sizeof(double));
-
+        //vDSP_vmulD(frameWindow, 1, (data + window_start), 1, window, 1, windowLength);
+        memcpy(
+            window,
+            (data + window_start),
+            windowLength * sizeof(double)
+        );
+        
         //  1.  calculate the LP Coefficients
-//        [self ForwardLinearPredictionwithData:window DataLength:windowLength Coeffs:lpc_coef + 1 Order:LPCorder];
-        [self FindLinearPredictionCoeffwithFrameArray:window ResultArray:lpc_coef Order:LPCorder FrameLength: windowLength];
-//        memcpy(lpc_coef, &(coeffs[0]),LPCorder * sizeof(double));
-        if(window_start > 36000 && !calculateFormants) {
-            [self CalculateFormantsFromLPC:lpc_coef Length:LPCorder];
-            calculateFormants = true;
-        }
+        //        [self ForwardLinearPredictionwithData:window DataLength:windowLength Coeffs:lpc_coef + 1 Order:LPCorder];
+        [
+            self
+            FindLinearPredictionCoeffwithFrameArray:window
+            ResultArray:lpc_coef
+            Order:LPCorder
+            FrameLength: windowLength
+        ];
+        
         //  2.  calculate the LP Residual
-        [self inverseFilter:window Result:LP_Residual FilterCoefficients:lpc_coef // construct LPC residual
-                ArrayLength:windowLength FilterLength:LPCorder];
+        [
+            self
+            inverseFilter:window
+            Result:LP_Residual
+            FilterCoefficients:lpc_coef // construct LPC residual
+            ArrayLength:windowLength
+            FilterLength:LPCorder
+        ];
+        
         //  3. copy data over and perform hilbert transform
         memcpy(HilTrans_LP_Residual, LP_Residual, totalwindowSize * sizeof(double)); // copy lpc residual for Hilbert Trans of LPC Resid
-        [self applyHanningWindowTo:window StartingAt:0 EndingAt:windowLength];
+        [
+            self
+            applyHanningWindowTo:window
+            StartingAt:0 EndingAt:windowLength
+        ];
         
-        [self performFFTForward:&HilTrans_LP_Residual Length:&totalwindowSize]; // forward fft
-        [self performHilbertPhaseShifts:HilTrans_LP_Residual Length:totalwindowSize]; // hilbert transform phase shifts
-        [self performFFTInverse:&HilTrans_LP_Residual Length:&totalwindowSize]; // complete hilbert trans
+        [
+            self
+            performFFTForward:&HilTrans_LP_Residual
+            Length:&totalwindowSize
+        ]; // forward fft
+        [
+            self
+            performHilbertPhaseShifts:HilTrans_LP_Residual
+            Length:totalwindowSize
+        ]; // hilbert transform phase shifts
         
+        [
+            self
+            performFFTInverse:&HilTrans_LP_Residual
+            Length:&totalwindowSize
+        ]; // complete hilbert trans
         [self hilberEnvelope:LP_Residual Transform:HilTrans_LP_Residual Length:windowLength]; // envelope both values toghether
+        
         for(int z = 0; z < windowLength; z++) {  // copy over data to result
             if(z > windowLength / 2) {
-               resultData[window_start + z] +=  HilTrans_LP_Residual[z];  // scale to .5 for overlap
+                resultData[window_start + z] +=  HilTrans_LP_Residual[z];  // scale to .5 for overlap
             } else {
                 resultData[window_start + z] = HilTrans_LP_Residual[z];
             }
         }
     }
-    // 50ms hanning window to smooth data after
+    // 50ms hamming window to smooth data after
     int convWindowLength = .05 * sampleFreq;
     double* hWindow = (double*) calloc(convWindowLength, sizeof(double)); // construct hamming window
     vDSP_hamm_windowD(hWindow, convWindowLength, 0);
     [self convolveData:resultData DataLength:totalSampleProcessed Filter:hWindow FilterLength:convWindowLength
-          Result:conv_resultData  ResultLength:totalSampleProcessed];
-
+                Result:conv_resultData  ResultLength:totalSampleProcessed];
+    
     [self scaleData:resultData Length:totalSampleProcessed Max:1.0 Min:-1.0];
     [self scaleData:conv_resultData Length:totalSampleProcessed Max:1.0 Min:0];
+
+//    // segments audio into word and vowel segments
+    double* fodData = (double*) malloc(sizeof(double) * pCount);
+    double* segData = (double*) calloc(pCount, sizeof(double));
+    double* segData1 = (double*) calloc(pCount, sizeof(double));
+    memcpy(segData1, conv_resultData, totalSampleProcessed * sizeof(double));
+    vector<audioSegment> segments = [self locateWordPeaksandBoundsWithData:conv_resultData Length:totalSampleProcessed];
+    [self enchanceHilbertEnvelopeWithData:conv_resultData Length:totalSampleProcessed WordSegments:segments];
+    [self generateVOPEvidiencewithData:conv_resultData Length:totalSampleProcessed WindowLength:(sampleFreq * .1)];
+    for(int i = 0; i < segments.size(); i++) {
+        [self print_temp_seg:&(segments[i]) Index:i];
+        for(int j = segments[i].wordStartIndex; j < segments[i].wordEndIndex; j += (int)(sampleFreq * .02)) {
+            printf("%f\n",[self performCrossCorrelation:(data + j) NumSamples:(int)(sampleFreq * .02)]);
+        }
+    }
+    [self locateVowelBoundariesWithVOPEvidience:conv_resultData Length:totalSampleProcessed WordSegments:segments];
+        printf("\n");
+    for(int i = 0; i < segments.size(); i++) {
+        [self print_temp_seg:&(segments[i]) Index:i];
+        segData[segments[i].wordStartIndex] = .5;
+        segData[segments[i].vowelStartIndex] = .75;
+        segData[segments[i].maxIndex] = 1.0;
+        segData[segments[i].vowelEndIndex] = .75;
+        segData[segments[i].wordEndIndex] = .5;
+    }
     
-    [self findVowelSegments:conv_resultData Length:totalSampleProcessed Result:VOP_Evidience];
-
-//    for(int j = 0; j < (totalSampleProcessed)/10; j++) {
-//        printf("%d\t%f\t%f\t%f\n", j, conv_resultData[j], data[j], (VOP_Evidience[j]));
+//    for(int j = 0; j < (totalSampleProcessed); j++) {
+//        printf("%f\t%f\t%f\t%f\t%f\n", segData1[j], conv_resultData[j], data[j], fodData[j], segData[j]);
 //    }
-
-    [self plotAllValuesStartingPacket:0 EndWithPacket:6000 forPackets:resultData];
-
+    
+  //  [self plotAllValuesStartingPacket:0 EndWithPacket:6000 forPackets:resultData];
+    
+}
+-(void) hilberTransformwithData:(double*) inputData ResultData:(double*) resultData Length:(int*) length {
+    memcpy(resultData, inputData, (*length) * sizeof(double)); // copy lpc residual for Hilbert Trans of LPC Resid
+    [self applyHanningWindowTo:resultData StartingAt:0 EndingAt:*length];
+    
+    [self performFFTForward:&resultData Length:length]; // forward fft
+    [self performHilbertPhaseShifts:resultData Length:*length]; // hilbert transform phase shifts
+    [self performFFTInverse:&resultData Length:length]; // complete hilbert trans
 }
 
 
@@ -224,7 +283,7 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
 }
 
 - (double)performCrossCorrelation:(double *)packets NumSamples:(int) numSamples
-{    
+{
     const int sampleCount = numSamples;
     // Populate *window with the values for a hamming window function
     double *hannWindow = (double *)malloc(sizeof(double) * numSamplesPerFrame);
@@ -234,8 +293,8 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     
     vDSP_hamm_windowD(hannWindow, numSamplesPerFrame, 0);
     
-
-    for (int i = 0; i < sampleCount - numSamplesPerFrame; i += numSamplesPerFrame) {
+    
+    for (int i = 0; i <= sampleCount - numSamplesPerFrame; i += numSamplesPerFrame) {
         // Window the samples
         int j = 0;
         for(; j < numSamplesPerSubFrame; j++) {
@@ -262,12 +321,12 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
                 //i+=2; // no peaks below 0, skip forward at a faster rate
             } else {
                 if(result[i]>result[i-1] && goingUp == false && i >1) {
-                
+                    
                     //local min at i-1
                     goingUp = true;
-                
+                    
                 } else if(goingUp == true && result[i]<result[i-1]) {
-                
+                    
                     //local max at i-1
                     if(peakArray[peak] == 0 && result[i-1]>result[i]*0.95) {
                         
@@ -294,7 +353,10 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     }
 }
 
--(void) FindLinearPredictionCoeffwithFrameArray:(double*) frame ResultArray:(double*) result Order:(int) p FrameLength:(int) frameLength{
+-(void) FindLinearPredictionCoeffwithFrameArray:(double*) frame
+                                    ResultArray:(double*) result
+                                          Order:(int) p
+                                    FrameLength:(int) frameLength{
     int col = 0;
     double* corMatrix = (double*) calloc(p * p, sizeof(double));
     memset(result, 0,p * sizeof(double));
@@ -304,9 +366,9 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     }
     for(int row =0; row < p; row++) {
         vDSP_convD(frame, 1, frame, 1, (corMatrix + row * p + col) , 1, p - col, frameLength);
-            for(int temp = 1; temp < p - col; temp++) {
-                corMatrix[row + col * p + temp * p] = corMatrix[row *p + col + temp];
-            }
+        for(int temp = 1; temp < p - col; temp++) {
+            corMatrix[row + col * p + temp * p] = corMatrix[row *p + col + temp];
+        }
         col++;
     }
     // solve the system of equations for the linear prediction coefficients
@@ -317,21 +379,20 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     long int LDB = dim;
     long int info = 0;
     long int ipiv[p * p -1];
-    dgetrf_(&dim, &dim, corMatrix, &LDA, ipiv, &info);
-    dgetrs_(&trans, &dim, &nrhs, corMatrix, &LDA, ipiv, result, &LDB, &info);
+    dgetrf_(&dim, &dim, corMatrix, &LDA, ipiv, &info); // invert matrix
+    dgetrs_(&trans, &dim, &nrhs, corMatrix, &LDA, ipiv, result, &LDB, &info); // mutiply inverted matrix to solve lpc coefficients
 }
 
 
 // performs inverse filter result length must equal arraylength
 // modeled after this page http://iitg.vlab.co.in/?sub=59&brch=164&sim=616&cnt=1109
 -(void) inverseFilter:(double*) data Result:(double*)result FilterCoefficients:(double*)filter
-        ArrayLength:(int) al FilterLength:(int)fl {
+          ArrayLength:(int) al FilterLength:(int)fl {
     int inverseFilterLength = fl + 1;
     static double * temp = (double*) calloc(inverseFilterLength, sizeof(double));
     temp[0] = 1;
     memccpy(temp + 1, filter, fl, sizeof(double));
-    // copy the last filter length of values 
-    //memccpy(result + (al - inverseFilterLength), data + (al - inverseFilterLength), inverseFilterLength, sizeof(double));
+    // copy the last filter length of values
     // the data vector must be atlest resultLength + filterLength
     [self convolveData:data DataLength:al Filter:filter FilterLength:inverseFilterLength Result:result ResultLength:(al)];
     
@@ -347,7 +408,7 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
         *data = tempStorage;
         *length = pow2length;
     }
-//    [self applyHanningWindowTo:*data StartingAt:0 EndingAt:length -1];
+    //    [self applyHanningWindowTo:*data StartingAt:0 EndingAt:length -1];
     int pow2lengthOver2 = pow2length / 2;;
     
     // We need complex buffers for real and imaginary parts. These buffers efficiently store values
@@ -407,7 +468,8 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     free(tempSplitComplex.realp);
     free(tempSplitComplex.imagp);
 }
-
+// estimates hilber transform by multipling entries by -j for ( index < (N/2) - 1)
+// and by j for ( index > (N/2) - 1)
 -(void) performHilbertPhaseShifts:(double*)packedData Length:(int)length {
     for(int i = 0; i < length/2; i++) {
         packedData[i]*= -1.0000;
@@ -422,12 +484,30 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
 
 // convolves data vector with window the length of data vector must be at least lResult + lFilter - 1.
 -(void) convolveData: (double*) data DataLength:(int) dLength Filter:(double*) filter FilterLength:(int)
-        fLength Result:(double*) result ResultLength:(int) resultLength {
+fLength Result:(double*) result ResultLength:(int) resultLength {
+    // Convolution of edge of vector
+    static int pad_length = fLength * 1.5 + 1;
+    static double* conv_pad = (double*) malloc(pad_length * sizeof(double));
+    if(pad_length < ((fLength * 1.5) -1)) {
+        free(conv_pad);
+        pad_length = fLength * 1.5;
+        conv_pad = (double*) malloc(pad_length * sizeof(double));
+    }
     int filterOver2 = fLength / 2;
-    // start at end of filter to perform convolution
-    memcpy(result, data, filterOver2 * sizeof(double));
-    memcpy(result + (resultLength - filterOver2), data + (resultLength - filterOver2), filterOver2 * sizeof(double));
-    vDSP_convD(data, 1, filter + fLength -1, -1, result + filterOver2,  1, resultLength - filterOver2,fLength);
+    // lots of logic for the edge cases
+    memset(conv_pad, 0, pad_length * sizeof(double)); // set padding to 0
+    memcpy((conv_pad + filterOver2), data, fLength * sizeof(double)); // copy over first filter over2 values at end of pad
+                                                                      //to avoid seg fault and convolve all values
+    vDSP_convD(conv_pad, 1, filter + fLength -1, -1, result,  1, filterOver2,fLength); // perform conv on padded values
+    
+    memset(conv_pad, 0, pad_length * sizeof(double)); // set padding to 0
+    memcpy(conv_pad, data + (resultLength - fLength), fLength * sizeof(double)); // copy over first filter over 2 values at begin of pad
+                                                                                 // to avoid seg fault and convolve all values
+    vDSP_convD(conv_pad, 1, filter + fLength -1, -1, result + (resultLength - filterOver2),  1, filterOver2,fLength);
+    
+    
+    // Bulk of Convolution
+    vDSP_convD(data, 1, filter + fLength -1, -1, result + filterOver2,  1, resultLength - fLength,fLength);
 }
 
 // stores result of hiblert envelop in array1
@@ -439,6 +519,7 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     }
 }
 
+// scales the data in an array between min and max
 - (void) scaleData: (double*) data Length:(int) length Max:(double) max Min:(double) min {
     double dMax, dMin;
     dMax = dMin = data[0];
@@ -449,8 +530,14 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
             dMin = data[i];
         }
     }
-    for(int i = 0; i < length; i ++) {
-        data[i] = (((max - min) * (data[i] - dMin)) / (dMax - dMin)) + min;
+    if(dMax != dMin) {
+        for(int i = 0; i < length; i ++) {
+            data[i] = (((max - min) * (data[i] - dMin)) / (dMax - dMin)) + min;
+        }
+    } else {
+        for(int i = 0; i < length; i ++) {
+            data[i] = (max + min) / 2;
+        }
     }
 }
 // computes first order central difference on data array
@@ -458,231 +545,242 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     *mean = 0.0;
     int sampleWindow = sampleFreq * time;
     int samWindowOver2 = sampleWindow >> 1;
-    for(int i = samWindowOver2; i < length - samWindowOver2; i ++) {
-        for(int j = i - samWindowOver2; j < i + samWindowOver2; j++) {
+    int start, end;
+    for(int i = 0; i < length; i ++) {
+        start = (i - samWindowOver2) > 0 ? (i - samWindowOver2) : 0;
+        end =   (i + samWindowOver2) < length ? (i + samWindowOver2) : length;
+        for(int j = start; j < end; j++) {
             if(i != j)
                 result[i] += (data[i] - data[j]) / (i - j);
         }
+        result[i] /= (end - start);
         *mean += abs(result[i]);
+        
     }
     (*mean) /= length;
 }
 
-- (void) findVowelSegments:(double*)data Length:(int)length Result:(double*)result {
-
-    double pThresh = .125;
-    double halfSlopeWindow = .005;
-    double mean;
-
-    [self firstOrderDifference:data Length:length Result:result Mean:&mean SampleWindowTime:.0001];
-    int minBeetwPeaks = .05 * sampleFreq;
-    vector<vowelSeg> tempSegs = [self locatePeakswithFODData:result Data:data Length:length Threshold:pThresh MeanSlope:mean];
-   for(int i = 0; i < tempSegs.size(); i++) {
-        result[tempSegs[i].maxIndex] = 1.0;
-    }
-//    [self scaleData:result Length:length Max:1.0 Min:0];
-    vowelSeg tempSeg, prevSeg;
-    bool minStart, max, minEnd, storedPrevSeg;
+- (vector<audioSegment>) locateWordPeaksandBoundsWithData:(double*)data Length:(int)length {
     
-//    for(int i = 1; i < length - 1; i ++) {
-        // if starting find minStart, max, and then minEnd
-//        if((localMin(i, data)) && (!max && !minEnd)) { // set minStart and set minstart to true
-//            tempSeg.minStartIndex = i;
-//            minStart = true;
-//        } else if((localMax(i, data) && data[i] &&(!max || data[i] > data[tempSeg.maxIndex]) && minStart && !minEnd) && (data[i] > pThresh)) {
-//            tempSeg.totalSlope = [self SumOfSlopeAroundMax:i FodData:result FodLength:length SecondsFrom:halfSlopeWindow];
-//            if((tempSeg.totalSlope / (sampleFreq * halfSlopeWindow * 2.0)) > (mean * .75)) {
-//                tempSeg.maxIndex = i;
-//                max = true;
-//            }
-//        } else if(!minEnd && localMin(i, data) && minStart && max  < vThresh) {
-//            minEnd = i;
-//            minEnd = true;
-//        }
-//        
-//        // located potential vowel segment with peak and two local minima
-//        if (minStart && max && minEnd) {
-//            if(!storedPrevSeg || ((tempSeg.maxIndex - prevSeg.minEndIndex) >= minBeetwPeaks)) { // not within 50 ms
-//                tempSegs.push_back(prevSeg);
-//                prevSeg = tempSeg;
-//                storedPrevSeg = true;
-//            } else if(prevSeg.totalSlope > tempSeg.totalSlope) { // conflict but temp seg has higher slope
-//                tempSegs.push_back(tempSeg);
-//                prevSeg = tempSeg;
-//            } else { // prev seg has higher slope
-//                 tempSegs.push_back(prevSeg);
-//            }
-//            tempSeg.minStartIndex = tempSeg.minEndIndex;  // start min of temp seg is endmin of last tempSef
-//            max = minEnd = false;
-//        }
-//    }
-//    for(int i =0 ; i < tempSegs.size(); i++) {
-//        vowelSeg temp = tempSegs[i];
-//        [self scaleData:(data + temp.minStartIndex) Length:(temp.minEndIndex - temp.minStartIndex) Max:1.0 Min:0.0];
-//    }
-//    double* VOPEvidience = (double*) calloc(length, sizeof(double));
-//    int hundredmsWindowLength = .1 * sampleFreq;
-//    double* window = (double*) calloc(hundredmsWindowLength, sizeof(double));
-//    [self firstOderGaussianWindow:window Length:hundredmsWindowLength];
-//    [self convolveData:data DataLength:length Filter:window FilterLength:hundredmsWindowLength Result:VOPEvidience ResultLength:length];
-//    [self scaleData:VOPEvidience Length:length Max:1.0 Min:-1.0];
-//    vector<vowelBoundaries>  vowelSegs = [self pickPeaksandValleys:VOPEvidience Length:length PeakThreshold:.5 ValleyThreshold:-.25];
-
+    double pThresh = .5;
+    double mean;
+    // locate peaks and work boundaries
+    double* fodData = (double*) malloc(sizeof(double) * length);
+    [self firstOrderDifference:data Length:length Result:fodData Mean:&mean SampleWindowTime:.001];
+    vector<audioSegment> tempSegs = [self locatePeakswithFODData:fodData Data:data Length:length Threshold:pThresh MeanSlope:mean];
+    [self wordSegmentBoundaries:fodData DataLength:length AroundPeaks:tempSegs];
+    free(fodData);
+    return tempSegs;
 }
 
--(vector<vowelSeg>) locatePeakswithFODData:(double*) fodData  Data:(double*) data Length:(int) length Threshold:(double) thresh MeanSlope:(double) mSlope{
-    vector<vowelSeg> tempVect;
-    vowelSeg tempSeg;
+// enchances hilber envelope by scaling word segments from 1.0
+- (void) enchanceHilbertEnvelopeWithData:(double*) data Length:(int) length WordSegments:(vector<audioSegment>&) wordSegs{
+    for(int i = 0; i < wordSegs.size(); i++) {
+        int start = wordSegs[i].wordStartIndex;
+        int end = wordSegs[i].wordEndIndex;
+        [self scaleData:(data + start) Length:(end - start) Max:1.0 Min:0];
+    }
+}
+
+// generate VOP Evidience by convolving hilbert envelope of data with first order Gaussian Differentiator
+- (void) generateVOPEvidiencewithData:(double*) data Length:(int) length WindowLength:(int) winLength{
+    double* tempData = (double*) malloc(length * sizeof(double));
+    double* window = (double*) malloc(winLength * sizeof(double));
+    [self firstOderGaussianWindow:window Length:winLength];
+    memcpy(tempData, data, length * sizeof(double));
+    [self convolveData:tempData DataLength:length Filter:window FilterLength:winLength
+                Result:data  ResultLength:length];
+    [self scaleData:data Length:length Max:1.0 Min:-1.0];
+    free(tempData);
+    free(window);
+}
+
+// locate peaks in VOP evidience waveform data 
+- (void) locateVowelBoundariesWithVOPEvidience:(double*) vopEvd Length:(int) length WordSegments:(vector<audioSegment>&) wordSegs{
+    int segment = 0;
+    int index = 0;
+    bool foundVoweStart, foundVowelEnd;
+    foundVoweStart = foundVowelEnd = false;
+    double secondsRange = .0005;
+    double threshold = .5;
+    while ((segment < wordSegs.size()) && (index < length - 1)) {
+        
+        if((vopEvd[index] > threshold) && localMax(index, vopEvd)
+           && (index >= wordSegs[segment].wordStartIndex)) {
+            if([self localMinOrMaxwithData:vopEvd Length:length AtIndex:index WithinSeconds:secondsRange MinOrMax:false]) {
+                wordSegs[segment].vowelStartIndex = index;
+                foundVoweStart = true;
+            }
+        } else if (foundVoweStart && vopEvd[index] < 0
+                   && (index <= wordSegs[segment].wordEndIndex)) {
+            if([self localMinOrMaxwithData:vopEvd Length:length AtIndex:index WithinSeconds:secondsRange  MinOrMax:true]) {
+                wordSegs[segment].vowelEndIndex = index;
+                foundVowelEnd = true;
+            }
+        }
+        
+        if(foundVoweStart && foundVowelEnd) {
+            segment++;
+            foundVoweStart = foundVowelEnd = false;
+        } else if((segment < (wordSegs.size() - 1)) && index >  wordSegs[segment + 1].wordStartIndex) {
+            printf("Eliminating word at:%d after reaching index:%d\n", segment, index);
+            if(!foundVoweStart) {
+                printf("NO Vowel Start above thresh\n");
+                wordSegs[segment].vowelStartIndex = 0;
+                wordSegs[segment].vowelEndIndex = 0;
+            } else if(!foundVowelEnd) {
+                printf("NO Vowel end below thresh\n");
+                  wordSegs[segment].vowelEndIndex = 0;
+            }
+            [self print_temp_seg:&(wordSegs[segment]) Index:segment];
+            //wordSegs.erase(wordSegs.begin() + segment);
+            segment++;
+            foundVoweStart = foundVowelEnd = false;
+        }
+        index++;
+    }
+}
+
+// false = MAX true = MIN 
+-(bool) localMinOrMaxwithData:(double*) data Length:(int) length AtIndex:(int) index WithinSeconds:(double) secs MinOrMax:(bool) min{
+    int range = secs * sampleFreq;
+    int start = (index - range) > 0 ? (index - range) : 0;
+    int end =   (index + range) < length ? (index + range) : length;
+    if(end == length || start == 0) {
+        printf("trimmed summation window\n");
+    }
+    if(!min) {
+        for(int i = start; i < end; i++) {
+            if(data[i] > data[index])
+                return false;
+        }
+    } else {
+        for(int i = start; i < end; i++) {
+            if(data[i] < data[index])
+                return false;
+        }
+    }
+    return true;
+}
+
+// false = MAX true = MIN
+-(bool) localMinOrMaxwithFODData:(double*) fodData Length:(int) length AtIndex:(int) index WithinSeconds:(double) secs MinOrMax:(bool) min{
+    int range = secs * sampleFreq;
+    int start = (index - range) > 0 ? (index - range) : 0;
+    int end =   (index + range) < length ? (index + range) : length;
+    if(end == length || start == 0) {
+        printf("trimmed summation window\n");
+    }
+    if(!min) {
+        for(int i = start; i < index; i++) {
+            if(fodData[i] > 0)
+                return false;
+        }
+        for(int i = index + 1; i < end; i++) {
+            if(fodData[i] < 0)
+                return false;
+        }
+    } else {
+        for(int i = start; i < index; i++) {
+            if(fodData[i] < 0)
+                return false;
+        }
+        for(int i = index + 1; i < end; i++) {
+            if(fodData[i] > 0)
+                return false;
+        }
+    }
+    return true;
+}
+
+-(vector<audioSegment>) locatePeakswithFODData:(double*) fodData  Data:(double*) data Length:(int) length Threshold:(double) thresh MeanSlope:(double) mSlope{
+    vector<audioSegment> tempVect;
+    audioSegment tempSeg;
     bool foundPrevSeg = false;
     int minBeetwPeaks = .05 * sampleFreq;
-    int sumofSlopeWindow = 2 * .005 * sampleFreq;
+    double sumofSlopeTimeOver2 = .005;
+    int sumofSlopeWindow = 2 * sumofSlopeTimeOver2 * sampleFreq;
     for(int i = 0; i < length; i++) {
         if(fodData[i] <= 0 && fodData[i -1] > 0) {
-            double totalSlope = [self SumOfSlopeAroundPoint:i FodData:fodData FodLength:length SecondsFrom:.005];
-            if(abs(totalSlope) > (thresh * sumofSlopeWindow * mSlope)) {
+            double totalSlope = [self SumOfSlopeAroundPoint:i FodData:fodData FodLength:length SecondsFrom:sumofSlopeTimeOver2];
+            if(abs(totalSlope) > (thresh * sumofSlopeWindow * mSlope) && totalSlope > 0) {
                 // potential local max
-                if(!foundPrevSeg) {
+                if(!foundPrevSeg) { // if this is the first segment located set tempseg index and total slope
                     tempSeg.maxIndex = i;
                     tempSeg.totalSlope = abs(totalSlope);
                     foundPrevSeg = true;
-                } else if((i - tempSeg.maxIndex) > minBeetwPeaks) {
-                    tempVect.push_back(tempSeg);
-                    tempSeg.maxIndex = i;
+                } else if((i - tempSeg.maxIndex) > minBeetwPeaks) { // segments are farther than min distance away
+                    tempVect.push_back(tempSeg); // push back first temp set
+                    tempSeg.maxIndex = i; // set temp seg with index and slope
                     tempSeg.totalSlope = abs(totalSlope);
-                } else if(mag(totalSlope) > tempSeg.totalSlope) { // if conflict between two segs
-                    tempSeg.maxIndex = i;
+                } else if(abs(totalSlope) > tempSeg.totalSlope) { // if conflict between two segs and slope of new index is higher
+                    tempSeg.maxIndex = i; // update temp seg
                     tempSeg.totalSlope = abs(totalSlope);
                 }
             }
         }
     }
+    if(foundPrevSeg) // push on pending segment to vector
+        tempVect.push_back(tempSeg);
     return tempVect;
+}
+-(void) wordSegmentBoundaries:(double*) fodData DataLength:(int) length AroundPeaks:(vector<audioSegment>&) tempSegs {
+    for(int i =0; i < tempSegs.size(); i++) {
+        [self locateNearestNegtoZeroCrossingAround:tempSegs[i] FODData:fodData FODLength:length];
+    }
+}
+
+-(void) locateNearestNegtoZeroCrossingAround:(audioSegment&) tempSeg FODData:(double*) data FODLength:(int) length {
+    double windowThresh = .002;
+    int startIndex, endIndex;
+    startIndex = endIndex = tempSeg.maxIndex;
+    startIndex = tempSeg.maxIndex;
+    endIndex = tempSeg.maxIndex;
+    while (startIndex > 0) {
+        startIndex--;
+        if((data[startIndex] < 0) && (data[startIndex + 1] >0)
+           && [self localMinOrMaxwithFODData:data Length:length AtIndex:startIndex WithinSeconds:windowThresh MinOrMax:false]) {
+            printf("Found min start: slope:%f to:%f\n", data[startIndex], data[startIndex + 1]);
+            break;
+        }
+    }
+    while (endIndex < length) {
+        endIndex++;
+        if((data[endIndex] < 0) && (data[endIndex + 1] >0)
+           && [self localMinOrMaxwithFODData:data Length:length AtIndex:endIndex WithinSeconds:windowThresh MinOrMax:false]) {
+            printf("Found min end: slope:%f to:%f\n", data[endIndex], data[endIndex + 1]);
+            break;
+        }
+    }
+    tempSeg.wordStartIndex = startIndex;
+    tempSeg.wordEndIndex = endIndex;
+
 }
 
 -(double) SumOfSlopeAroundPoint:(int) index FodData:(double*) fodData FodLength:(int) length SecondsFrom:(double) secs {
     int halfSlopeSumLength =  secs * sampleFreq;
     int start = (index - halfSlopeSumLength) > 1 ? (index - halfSlopeSumLength) : 1;
     int end = (index + halfSlopeSumLength) < length ? (index + halfSlopeSumLength) : length - 1;
-    
+    if(end == length || start == 0) {
+        printf("trimmed summation window");
+    }
     double sum = 0.0;
     for(int i = start; i <= end; i++) {
-//        if(index != i)
-//            sum += (fodData[index] - fodData[i]) /  (index - i);
-        sum += abs(fodData[index]);
+        sum += (i < index) ? fodData[i] : (-1.0 * fodData[i]);
     }
     return sum;
 }
 - (void) firstOderGaussianWindow:(double*)window Length:(int) length {
-    double signma = 234;
-    double omega  = .00206;
-    for(int i =0; i < length ; i++) {
-        window[i] = -1.0 / (sqrt(2 * PI) * signma) * exp(-1.0 * pow(i,2) / (2 * pow(signma, 2))) * cos(omega * i);
+    double signma = 551;
+//    double omega  = .00206;
+    double last, current;
+    last = window[0] = (1.0 / (sqrt(2 * PI) * signma)) * exp( -1.0 * pow((0 - (length/2)),2.0) / (2 * pow(signma, 2.0)));
+    for(int i =1; i < length ; i++) {
+        current = (1.0 / (sqrt(2 * PI) * signma)) * exp( -1.0 * pow((i - (length/2)),2.0) / (2 * pow(signma, 2.0)));
+        window[i] = current - last;
+        last = current;
     }
 }
-- (vector<vowelBoundaries>) pickPeaksandValleys:(double*)data Length:(int) length PeakThreshold:(double) pThresh ValleyThreshold:(double) vThresh {
-    vector<vowelBoundaries> tempVect;
-    vowelBoundaries vb;
-    bool fndlMax, fndLMin;
-    for(int i = 0; i < length ; i++) {
-        if(localMax(i, data) && (data[i] > pThresh)) {
-            vb.start = i;
-            fndlMax = true;
-        } else if (fndlMax && localMin(i, data) && data[i] < vThresh) {
-            vb.end = i;
-            fndLMin = true;
-        }
-        
-        if(fndlMax && fndLMin) {
-            tempVect.push_back(vb);
-            fndlMax = fndLMin = false;
-        }
-    }
-    return tempVect;
-}
-
-//- (void)performFFTOnRangeStartingAt:(int)sp EndingAt:(int)ep
-//{
-//    _mLog2N = ceil(log2(ep - sp));
-//    _mNumberOfPackets = (int) pow(2, _mLog2N);
-//    _mFFTLength = _mNumberOfPackets / 2;
-//
-//    // We need complex buffers for real and imaginary parts. These buffers efficiently store values
-//    // by getting rid of redundant values in real and imaginary parts of complex numbers.
-//    _mSplitComplex.realp = (double *) calloc(_mFFTLength, sizeof(double));
-//    _mSplitComplex.imagp = (double *) calloc(_mFFTLength, sizeof(double));
-//
-//    // Transforms the real array input = {A[0],..., A[n]} into an even-odd
-//    // array splitComplex = {A[0], A[2],..., A[n-1], A[1], A[3],..., A[n]}.
-//    // splitComplex stores the imaginary and real parts in separate arrays
-//    vDSP_ctozD((DSPDoubleComplex *)_mAudioBuffer, 2, &_mSplitComplex, 1, _mFFTLength);
-//
-//    // Computes an in-place single-precision real discrete Fourier transform,
-//    // from the time domain to the frequency domain (forward).
-//    vDSP_fft_zripD(self.fftSetup, &_mSplitComplex, 1, _mLog2N, kFFTDirection_Forward);
-//
-//    [self plotRange:ep - sp forPackets:_mAudioBuffer];
-//
-//    double scale = 1.0 / (2 * _mNumberOfPackets);
-//    vDSP_vsmulD(_mSplitComplex.realp, 1, &scale, _mSplitComplex.realp, 1, _mFFTLength);
-//    vDSP_vsmulD(_mSplitComplex.imagp, 1, &scale, _mSplitComplex.imagp, 1, _mFFTLength);
-//
-//    _mSplitComplex.realp[0] = 0; // zeroing out the DC value
-//    _mSplitComplex.imagp[0] = 0; // zeroing out the Nyquist value
-//
-//    double tmpData[_mFFTLength];
-//    double mAdjust0BD = 1.5849e-13;
-//    double one = 1.0;
-//
-//    // Convert from complex/rectangular (real & imaginary) coordinates
-//    // to polar (magnitude & phase) coordinates
-//    vDSP_zvmagsD(&_mSplitComplex, 1, tmpData, 1, _mFFTLength);
-//    vDSP_vsaddD(tmpData, 1, &mAdjust0BD, tmpData, 1, _mFFTLength);
-//    vDSP_vdbconD(tmpData, 1, &one, tmpData, 1, _mFFTLength, 0);
-//
-//    for (int i = 0; i < _mFFTLength; i++) {
-//        if (tmpData[i] < 0.0) {
-//            tmpData[i] = 0;
-//        }
-//    }
-//
-////    [self plotRange:_mFFTLength forPackets:tmpData];
-//
-//    DSPDoubleComplex *complex = new DSPDoubleComplex[_mFFTLength];
-//
-//    // For polar coordinates
-//    double *mag = new double[_mFFTLength];
-//    double *phase = new double[_mFFTLength];
-//
-//    // Get complex vector absolute values
-//    vDSP_zvabsD(&_mSplitComplex, 1, mag, 1, _mFFTLength);
-//    // Get complex vector phase
-//    vDSP_zvphasD(&_mSplitComplex, 1, phase, 1, _mFFTLength);
-//
-//    _mSplitComplex.realp = mag;
-//    _mSplitComplex.imagp = phase;
-//
-//    // Convert from polar coords back to rectangular coords
-//    vDSP_ztocD(&_mSplitComplex, 1, complex, 2, _mFFTLength);
-//    vDSP_rectD((double *)complex, 2, (double *)complex, 2, _mFFTLength); // Polar to rectangular conversion
-//    vDSP_ctozD(complex, 2, &_mSplitComplex, 1, _mFFTLength);
-//
-//    // Computes an in-place single-precision real discrete Fourier transform,
-//    // from the frequency domain to the time domain (inverse).
-//    vDSP_fft_zripD(_fftSetup, &_mSplitComplex, 1, _mLog2N, kFFTDirection_Inverse);
-//
-//    // Unpack the result into a real vector
-//    vDSP_ztocD(&_mSplitComplex, 1, (DSPDoubleComplex *)_mAudioBuffer, 2, _mLog2N);
-//
-//    // Compensate for scaling for both FFTs. See Apple's vDSP documentation
-//    // to see how much scaling is required.
-//    // NOTE: Apple scales values to increase the efficiency of their functions.
-//    // As such, we have to scale them back.
-//    vDSP_vsmulD(_mAudioBuffer, 1, &scale, _mAudioBuffer, 1, _mLog2N);
-//
-////    [self plotRange:ep - sp forPackets:_mAudioBuffer];
-//    free(_mSplitComplex.realp);
-//    free(_mSplitComplex.imagp);
-//}
 
 -(void) ForwardLinearPredictionwithData:(double*)x DataLength:(int) length Coeffs:(double*) coeffs Order:(int) order{
     // GET SIZE FROM INPUT VECTORS
@@ -707,10 +805,10 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     {
         // COMPUTE LAMBDA
         double lambda = 0.0;
-        for ( size_t j = 0; j <= k; j++ ) 
-        { 
+        for ( size_t j = 0; j <= k; j++ )
+        {
             lambda -= Ak[ j ] * R[ k + 1 - j ];
-        } 
+        }
         lambda /= Ek;
         // UPDATE Ak
         for ( size_t n = 0; n <= ( k + 1 ) / 2; n++ )
@@ -721,24 +819,41 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
         }
         // UPDATE Ek
         Ek *= 1.0 - lambda * lambda;
-    } 
-    // ASSIGN COEFFICIENTS 
+    }
+    // ASSIGN COEFFICIENTS
     memcpy(coeffs, &(Ak[0]),  Ak.size() * sizeof(double));
 }
--(void) CalculateFormantsFromLPC:(double*)data Length:(int) length{
-    unsigned long log2N = ceil(log2(sampleFreq));
-    int pow2length = (int) pow(2, log2N);
-    //    [self applyHanningWindowTo:*data StartingAt:0 EndingAt:length -1];
-    int pow2lengthOver2 = pow2length / 2;;
+-(void) CalculateFormantsWithLPC:(double*) lpcData LPCLength:(int) lpcLength LPCWindowTime:(double) lpcWinTime
+                                 WindowTime:(double) winTime WindowOverlap:(double) overlap Result:(formantData*) result ResultLength:(int) rLength {
+    int lpcWinLength = sampleFreq * lpcWinTime;
+    int formantCount = lpcLength / LPCorder;
+    int start = 0;
+    for (int i = 0; i < formantCount; i++) {
+        start = i * LPCorder;
+        [self CalculateFormantsFromLPC:(lpcData + start) Length:LPCorder];
+    }
+}
+
+-(formantData) CalculateFormantsFromLPC:(double*)data Length:(int) length {
+    static int pow2length = 0;
+    static DSPDoubleSplitComplex tempSplitComplex;
+    static long log2N = 0;
+    if(pow2length < length) {
+        if(pow2length != 0) {
+            free(tempSplitComplex.realp);
+            free(tempSplitComplex.imagp);
+        }
+        log2N = ceil(log2(sampleFreq));
+        pow2length = (int) pow(2, log2N);
+        tempSplitComplex.realp = (double *) calloc(pow2length>>1, sizeof(double));
+        tempSplitComplex.imagp = (double *) calloc(pow2length>>1, sizeof(double));
+    }
+    [self applyHanningWindowTo:data StartingAt:0 EndingAt:length -1];
+    int pow2lengthOver2 = pow2length / 2;
     double* data1 = (double*) malloc((length + 1) * sizeof(double));
     memcpy(data1 + 1, data, length * sizeof(double));
     data1[0] = 1.0;
-    // We need complex buffers for real and imaginary parts. These buffers efficiently store values
-    // by getting rid of redundant values in real and imaginary parts of complex numbers.
-    DSPDoubleSplitComplex tempSplitComplex;
-    tempSplitComplex.realp = (double *) calloc(pow2lengthOver2, sizeof(double));
-    tempSplitComplex.imagp = (double *) calloc(pow2lengthOver2, sizeof(double));
-    
+
     // Transforms the real array input = {A[0],..., A[n]} into an even-odd
     // array splitComplex = {A[0], A[2],..., A[n-1], A[1], A[3],..., A[n]}.
     // splitComplex stores the imaginary and real parts in separate arrays
@@ -751,11 +866,27 @@ const int diffSubandFrame = numSamplesPerFrame - numSamplesPerSubFrame;
     for(int i = 0; i < pow2lengthOver2 /2; i ++) {
         double arr0sqrd = pow(tempSplitComplex.realp[i], 2.0);
         double arr1sqrd = pow(tempSplitComplex.imagp[i], 2.0);
-        double tempDub = 1 / sqrt(arr0sqrd + arr1sqrd);
-        printf("%d\t%f\t%f\t%f\n", i, tempDub, tempDub, tempDub);
+        tempSplitComplex.realp[i] = 1 / sqrt(arr0sqrd + arr1sqrd);
     }
     
-    free(tempSplitComplex.realp);
-    free(tempSplitComplex.imagp);
+int index, formant;
+index = formant = 0;
+    formantData fdTemp;
+while(index < pow2length && formant < 4) {
+    if([self localMinOrMaxwithData:tempSplitComplex.realp Length:pow2lengthOver2 AtIndex:index WithinSeconds:.00025 MinOrMax:false]) {
+        fdTemp.formant[formant] = ((index * sampleFreq) / pow2length);
+    }
+}
+return fdTemp;
+}
+
+-(void) print_temp_seg:(audioSegment*) audSeg Index:(int) index{
+    double wStart, wEnd, maxIndex, vStart, vEnd;
+    wStart = audSeg->wordStartIndex;
+    wEnd = audSeg->wordEndIndex;
+    maxIndex = audSeg->maxIndex;
+    vStart = audSeg->vowelStartIndex;
+    vEnd   = audSeg->vowelEndIndex;
+    printf("Seg:%d start:%E vStart:%E peak:%E vEnd:%E end:%E wLeng:%E vLeng%E\n", index, wStart, vStart, maxIndex, vEnd, wEnd, ((wEnd - wStart)/sampleFreq), (vEnd - vStart)/sampleFreq);
 }
 @end
