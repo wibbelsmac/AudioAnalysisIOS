@@ -39,6 +39,14 @@ typedef struct {
     double formant[numFormants];
 } formantData;
 
+typedef struct {
+    double pitch;
+    int startIndex;
+    int endIndex;
+    double pitchCorrelation;
+} PitchStruct;
+
+
 - (void)plotRange:(int)range forPackets:(double *)packets;
 - (void)plotAllValuesStartingPacket:(int)sp EndWithPacket:(int)ep forPackets:(double *)packets;
 
@@ -205,14 +213,15 @@ static const int LPCorder = 44;
     [self generateVOPEvidiencewithData:conv_resultData Length:totalSampleProcessed WindowLength:(sampleFreq * .1)];
     for(int i = 0; i < segments.size(); i++) {
         [self print_temp_seg:&(segments[i]) Index:i];
-        for(int j = segments[i].wordStartIndex; j < segments[i].wordEndIndex; j += (int)(sampleFreq * .02)) {
-            printf("%f\n",[self performCrossCorrelation:(data + j) NumSamples:(int)(sampleFreq * .02)]);
-        }
+       
     }
     [self locateVowelBoundariesWithVOPEvidience:conv_resultData Length:totalSampleProcessed WordSegments:segments];
         printf("\n");
     for(int i = 0; i < segments.size(); i++) {
         [self print_temp_seg:&(segments[i]) Index:i];
+        for(int j = segments[i].vowelStartIndex; j < segments[i].vowelEndIndex; j += (int)(sampleFreq * .02)) {
+            printf("%f\n",[self performCrossCorrelation:(data + j) NumSamples:(int)(sampleFreq * .02)]);
+        }
         segData[segments[i].wordStartIndex] = .5;
         segData[segments[i].vowelStartIndex] = .75;
         segData[segments[i].maxIndex] = 1.0;
@@ -282,6 +291,19 @@ static const int LPCorder = 44;
     [graph plotXAndYValues];
 }
 
+-(vector<PitchStruct>) calculatePitchWithData:(double*) data Length:(int) len MinPitch:(double) minP MaxPitch:(double) maxP
+                       WindowTime:(double) winTime WindowShift:(double) winShift AudioSegment:(audioSegment) audSeg {
+    vector<PitchStruct> pitch;
+    int winLength = winTime * sampleFreq;
+    int winShiftLen  = winShift * sampleFreq;
+    int start = max(0, (audSeg.vowelStartIndex - (winLength /2)));
+    int end = min(len, (audSeg.vowelEndIndex + (winLength /2)));
+    for(int i = start; i < end - (winLength / 2); i += winShift) {
+        
+    }
+    return pitch;
+}
+
 - (double)performCrossCorrelation:(double *)packets NumSamples:(int) numSamples
 {
     const int sampleCount = numSamples;
@@ -305,9 +327,22 @@ static const int LPCorder = 44;
             tempSamples[j] = packets[i + j] * hannWindow[j];
         }
         vDSP_convD(tempSamples,1, subFrameSamples,1,resultWindow, 1, diffSubandFrame, numSamplesPerSubFrame);
-        return [self findPitchPeakFreq:resultWindow NumFrames:diffSubandFrame];
+//        for(int i = 0; i < )
+        //return [self findPitchPeakFreq:resultWindow NumFrames:diffSubandFrame];
     }
     return 0.0;
+}
+
+- (int) findMinorMaxinRange:(double*) data Length:(int) len Start:(int) sIndex End:(int) eIndex MaxorMin:(bool) maxOrMin {
+    int maxIndex = sIndex;
+    double max = data[maxIndex];
+    for(int i = sIndex; i < eIndex; i ++) {
+        if(data[i] > max) {
+            maxIndex = i;
+            max = data[maxIndex];
+        }
+    }
+    return maxIndex;
 }
 
 -(double) findPitchPeakFreq:(double*)result NumFrames:(int) numFrames {
