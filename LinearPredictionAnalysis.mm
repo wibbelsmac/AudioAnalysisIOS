@@ -92,6 +92,7 @@ static const int LPCorder = 44;
         }
         
         double * filteredData = (double*) calloc(_mNumberOfPackets, sizeof(double));
+        // initialize a butterworth low pass filter with a cutoff frequency of 8KHz
         AAAButterLow *blow = [[AAAButterLow alloc] initWithSampleFreq:sampleFreq CutoffFreq:8000];
         [blow filterArray:_mAudioBuffer DataLength:_mNumberOfPackets ResultArray:filteredData ResultLength:_mNumberOfPackets];
         _mAudioBuffer = filteredData;
@@ -193,7 +194,7 @@ static const int LPCorder = 44;
             }
         }
     }
-    // 50ms hamming window to smooth data after
+    // 50ms hamming window to smooth data
     int convWindowLength = .05 * sampleFreq;
     double* hWindow = (double*) calloc(convWindowLength, sizeof(double)); // construct hamming window
     vDSP_hamm_windowD(hWindow, convWindowLength, 0);

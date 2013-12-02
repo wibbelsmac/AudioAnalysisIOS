@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>IDESourceControlProjectFavoriteDictionaryKey</key>
+	<false/>
+	<key>IDESourceControlProjectIdentifier</key>
+	<string>6D3CC4AB-3A37-4802-B3F2-3985BDAF8CD1</string>
+	<key>IDESourceControlProjectName</key>
+	<string>AudioAnalysisApp</string>
+	<key>IDESourceControlProjectOriginsDictionary</key>
+	<dict>
+		<key>54B6A390-7504-4D40-A16E-D44301E5D651</key>
+		<string>ssh://github.com/wibbelsmac/AudioAnalysisIOS.git</string>
+		<key>7029D6B3-DF58-4FE5-B4A8-656B399E7AA6</key>
+		<string>ssh://github.com/wibbelsmac/AudioAnalysisIOS.git</string>
+	</dict>
+	<key>IDESourceControlProjectPath</key>
+	<string>AudioAnalysisApp.xcodeproj/project.xcworkspace</string>
+	<key>IDESourceControlProjectRelativeInstallPathDictionary</key>
+	<dict>
+		<key>54B6A390-7504-4D40-A16E-D44301E5D651</key>
+		<string>../..</string>
+		<key>7029D6B3-DF58-4FE5-B4A8-656B399E7AA6</key>
+		<string>../../../../Code/AudioAnalysisIOS</string>
+	</dict>
+	<key>IDESourceControlProjectURL</key>
+	<string>ssh://github.com/wibbelsmac/AudioAnalysisIOS.git</string>
+	<key>IDESourceControlProjectVersion</key>
+	<integer>110</integer>
+	<key>IDESourceControlProjectWCCIdentifier</key>
+	<string>54B6A390-7504-4D40-A16E-D44301E5D651</string>
+	<key>IDESourceControlProjectWCConfigurations</key>
+	<array>
+		<dict>
+			<key>IDESourceControlRepositoryExtensionIdentifierKey</key>
+			<string>public.vcs.git</string>
+			<key>IDESourceControlWCCIdentifierKey</key>
+			<string>54B6A390-7504-4D40-A16E-D44301E5D651</string>
+			<key>IDESourceControlWCCName</key>
+			<string>AudioAnalysisIOS</string>
+		</dict>
+		<dict>
+			<key>IDESourceControlRepositoryExtensionIdentifierKey</key>
+			<string>public.vcs.git</string>
+			<key>IDESourceControlWCCIdentifierKey</key>
+			<string>7029D6B3-DF58-4FE5-B4A8-656B399E7AA6</string>
+			<key>IDESourceControlWCCName</key>
+			<string>AudioAnalysisIOS</string>
+		</dict>
+	</array>
+</dict>
+</plist>
